@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "847099266485",
+    "project_id": "project-f15a4cd1-d4d2-4dad-8bd",
+    "storage_bucket": "project-f15a4cd1-d4d2-4dad-8bd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:847099266485:android:651280b2413fb966c805fc",
+        "android_client_info": {
+          "package_name": "com.example.crop_farm_management"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBlDiQp8-cUYBzgJE7zJIpoUJSXgSWeG28"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:847099266485:android:2bfd3755beb6fa1fc805fc",
+        "android_client_info": {
+          "package_name": "com.greenharvest.farm"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBlDiQp8-cUYBzgJE7zJIpoUJSXgSWeG28"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
