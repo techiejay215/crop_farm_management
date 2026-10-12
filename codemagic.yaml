@@ -1,0 +1,27 @@
+workflows:
+  ios-workflow:
+    name: iOS Workflow
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+    cache:
+      cache_paths:
+        - $HOME/Library/Caches/CocoaPods
+        - $HOME/.pub-cache
+    scripts:
+      - name: Pre-build script
+        script: |
+          #!/bin/sh
+          set -e
+          set -x
+          flutter clean
+          rm -rf ios/Pods
+          rm -f ios/Podfile.lock
+          flutter pub get
+          cd ios && pod install
+      - name: Build iOS
+        script: |
+          #!/bin/sh
+          flutter build ios --debug --no-codesign
