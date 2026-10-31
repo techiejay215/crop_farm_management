@@ -17,7 +17,7 @@ jobs:
       - run: flutter pub get
       - name: Prepare macOS Podfile
         run: |
-          flutter create --platforms=macos .
+          flutter create --platforms=macos --org com.greenharvest .
           sed -i '' "s/platform :osx, '10.14'/platform :osx, '10.15'/" macos/Podfile
           head -3 macos/Podfile
 
