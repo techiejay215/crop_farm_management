@@ -15,6 +15,12 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - name: Prepare macOS Podfile
+        run: |
+          flutter create --platforms=macos .
+          sed -i '' "s/platform :osx, '10.14'/platform :osx, '10.15'/" macos/Podfile
+          head -3 macos/Podfile
+
       - run: flutter build macos --release
       - name: Zip .app
         run: |
