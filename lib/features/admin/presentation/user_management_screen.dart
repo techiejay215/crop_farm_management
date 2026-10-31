@@ -10,6 +10,19 @@ class UserManagementScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 1000;
+        if (isDesktop) return _buildDesktop(context, ref);
+        return _buildMobile(context, ref);
+      },
+    );
+  }
+
+  // ===========================================================================
+  // MOBILE
+  // ===========================================================================
+  Widget _buildMobile(BuildContext context, WidgetRef ref) {
     final usersAsync = ref.watch(allUsersStreamProvider);
     final filter = ref.watch(userStatusFilterProvider);
     final query = ref.watch(userSearchQueryProvider).toLowerCase();
@@ -42,50 +55,13 @@ class UserManagementScreen extends ConsumerWidget {
       ),
       body: Column(
         children: [
-          // ---------- Search ----------
+          // Search
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-            child: TextField(
-              onChanged: (v) =>
-                  ref.read(userSearchQueryProvider.notifier).state = v,
-              style: const TextStyle(
-                fontSize: 14,
-                color: DPalette.ink,
-                fontWeight: FontWeight.w500,
-              ),
-              decoration: InputDecoration(
-                hintText: 'Search by name or email',
-                hintStyle: const TextStyle(
-                  color: DPalette.inkFaint,
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w400,
-                ),
-                prefixIcon: const Icon(
-                  Icons.search_rounded,
-                  size: 20,
-                  color: DPalette.inkFaint,
-                ),
-                isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-                filled: true,
-                fillColor: DPalette.surface,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: DPalette.hairline),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: DPalette.hairline),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: DPalette.leaf, width: 1.5),
-                ),
-              ),
-            ),
+            child: _searchField(ref),
           ),
-          // ---------- Filter chips ----------
+
+          // Filter chips
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Row(
@@ -99,50 +75,23 @@ class UserManagementScreen extends ConsumerWidget {
             ),
           ),
 
-          // ---------- Users list ----------
+          // List
           Expanded(
             child: usersAsync.when(
               loading: () => const Center(
                 child: CircularProgressIndicator(color: DPalette.leaf),
               ),
-              error: (e, _) => Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    'Error: $e',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: DPalette.inkMuted,
-                    ),
-                  ),
-                ),
-              ),
+              error: (e, _) => _errorState(e),
               data: (users) {
-                var filtered = users;
-                if (filter == UserStatusFilter.active) {
-                  filtered = filtered.where((u) => u.isActive).toList();
-                } else if (filter == UserStatusFilter.paused) {
-                  filtered = filtered.where((u) => u.isPaused).toList();
-                }
-                if (query.isNotEmpty) {
-                  filtered = filtered
-                      .where((u) =>
-                          u.name.toLowerCase().contains(query) ||
-                          u.email.toLowerCase().contains(query))
-                      .toList();
-                }
-
-                if (filtered.isEmpty) {
-                  return const _EmptyState();
-                }
+                final filtered = _applyFilters(users, filter, query);
+                if (filtered.isEmpty) return const _EmptyState();
 
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                   itemCount: filtered.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 10),
                   itemBuilder: (context, i) =>
-                      _userCard(context, ref, filtered[i]),
+                      _mobileUserCard(context, ref, filtered[i]),
                 );
               },
             ),
@@ -152,30 +101,371 @@ class UserManagementScreen extends ConsumerWidget {
     );
   }
 
-  Widget _chip(WidgetRef ref, String label, UserStatusFilter value,
-      UserStatusFilter current) {
-    final selected = current == value;
-    return ChoiceChip(
-      label: Text(label),
-      selected: selected,
-      onSelected: (_) =>
-          ref.read(userStatusFilterProvider.notifier).state = value,
-      selectedColor: DPalette.leaf,
-      backgroundColor: DPalette.surface,
-      labelStyle: TextStyle(
-        color: selected ? Colors.white : DPalette.ink,
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
+  // ===========================================================================
+  // DESKTOP
+  // ===========================================================================
+  Widget _buildDesktop(BuildContext context, WidgetRef ref) {
+    final usersAsync = ref.watch(allUsersStreamProvider);
+    final filter = ref.watch(userStatusFilterProvider);
+    final query = ref.watch(userSearchQueryProvider).toLowerCase();
+
+    return Scaffold(
+      backgroundColor: DPalette.canvas,
+      body: usersAsync.when(
+        loading: () => const Center(
+          child: CircularProgressIndicator(color: DPalette.leaf),
+        ),
+        error: (e, _) => _errorState(e),
+        data: (users) {
+          final filtered = _applyFilters(users, filter, query);
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(32),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1400),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header
+                    _desktopHeader(context, ref),
+                    const SizedBox(height: 24),
+
+                    // Stats
+                    _desktopStats(users),
+                    const SizedBox(height: 24),
+
+                    // Filter toolbar
+                    _desktopToolbar(
+                      ref,
+                      filter,
+                      total: users.length,
+                      filtered: filtered.length,
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Grid
+                    if (filtered.isEmpty)
+                      const SizedBox(height: 400, child: _EmptyState())
+                    else
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate:
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 400,
+                          mainAxisExtent: 178,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                        ),
+                        itemCount: filtered.length,
+                        itemBuilder: (context, i) => _desktopUserCard(
+                          context,
+                          ref,
+                          filtered[i],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       ),
-      side: BorderSide(
-        color: selected ? DPalette.leaf : DPalette.hairline,
-      ),
-      showCheckmark: false,
-      padding: const EdgeInsets.symmetric(horizontal: 4),
     );
   }
 
-  Widget _userCard(BuildContext context, WidgetRef ref, AdminUser u) {
+  Widget _desktopHeader(BuildContext context, WidgetRef ref) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'User Management',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: DPalette.ink,
+                  letterSpacing: -0.8,
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Review, pause and manage every account on the platform.',
+                style: TextStyle(fontSize: 14, color: DPalette.inkMuted),
+              ),
+            ],
+          ),
+        ),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320, minWidth: 240),
+          child: _searchField(ref, dense: true),
+        ),
+        const SizedBox(width: 8),
+        IconButton(
+          tooltip: 'Refresh',
+          icon: const Icon(Icons.refresh_rounded, color: DPalette.inkSoft),
+          onPressed: () => ref.invalidate(allUsersStreamProvider),
+        ),
+      ],
+    );
+  }
+
+  Widget _desktopStats(List<AdminUser> users) {
+    final total = users.length;
+    final active = users.where((u) => u.isActive).length;
+    final paused = users.where((u) => u.isPaused).length;
+    final admins = users.where((u) => u.isAdmin).length;
+
+    return Row(
+      children: [
+        Expanded(
+          child: _userStatCard(
+            icon: Icons.people_alt_outlined,
+            label: 'Total users',
+            value: '$total',
+            accent: DPalette.leaf,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _userStatCard(
+            icon: Icons.check_circle_outline,
+            label: 'Active',
+            value: '$active',
+            accent: DPalette.profit,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _userStatCard(
+            icon: Icons.pause_circle_outline,
+            label: 'Paused',
+            value: '$paused',
+            accent: DPalette.expense,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _userStatCard(
+            icon: Icons.shield_outlined,
+            label: 'Admins',
+            value: '$admins',
+            accent: DPalette.revenue,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _userStatCard({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color accent,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: DPalette.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: DPalette.hairline),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: 0.05),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  accent.withValues(alpha: 0.22),
+                  accent.withValues(alpha: 0.10),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Icon(icon, size: 19, color: accent),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: DPalette.ink,
+                      letterSpacing: -0.5,
+                      height: 1,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: DPalette.inkMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _desktopToolbar(
+    WidgetRef ref,
+    UserStatusFilter filter, {
+    required int total,
+    required int filtered,
+  }) {
+    return Row(
+      children: [
+        _chip(ref, 'All', UserStatusFilter.all, filter),
+        const SizedBox(width: 8),
+        _chip(ref, 'Active', UserStatusFilter.active, filter),
+        const SizedBox(width: 8),
+        _chip(ref, 'Paused', UserStatusFilter.paused, filter),
+        const Spacer(),
+        Text(
+          filtered == total ? '$total users' : '$filtered of $total users',
+          style: const TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: DPalette.inkMuted,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ===========================================================================
+  // DESKTOP USER CARD
+  // ===========================================================================
+  Widget _desktopUserCard(
+    BuildContext context,
+    WidgetRef ref,
+    AdminUser u,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: DPalette.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: DPalette.hairline),
+        boxShadow: DPalette.softShadow(),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _avatar(u, size: 46, radius: 13, fontSize: 14),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            u.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w800,
+                              color: DPalette.ink,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ),
+                        if (u.isAdmin) ...[
+                          const SizedBox(width: 6),
+                          _adminBadge(),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      u.email,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: DPalette.inkMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              _statusBadge(u),
+            ],
+          ),
+
+          const Spacer(),
+
+          // Divider
+          const Divider(height: 1, color: DPalette.hairline),
+          const SizedBox(height: 10),
+
+          // Footer row
+          Row(
+            children: [
+              _statusPill(
+                icon: Icons.agriculture_outlined,
+                label:
+                    '${u.farmCount} farm${u.farmCount == 1 ? '' : 's'}',
+                color: DPalette.inkMuted,
+              ),
+              const Spacer(),
+              if (u.isCustomer)
+                _menuButton(context, ref, u),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // MOBILE USER CARD
+  // ===========================================================================
+  Widget _mobileUserCard(
+    BuildContext context,
+    WidgetRef ref,
+    AdminUser u,
+  ) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -186,28 +476,8 @@ class UserManagementScreen extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          // Avatar
-          Container(
-            width: 46,
-            height: 46,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: u.isAdmin ? DPalette.chipNeutral : DPalette.chipGreen,
-              borderRadius: BorderRadius.circular(13),
-            ),
-            child: Text(
-              u.initials,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-                color: u.isAdmin ? DPalette.inkSoft : DPalette.leaf,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ),
+          _avatar(u, size: 46, radius: 13, fontSize: 14),
           const SizedBox(width: 12),
-
-          // Info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -229,23 +499,7 @@ class UserManagementScreen extends ConsumerWidget {
                     ),
                     if (u.isAdmin) ...[
                       const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: DPalette.chipNeutral,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          'ADMIN',
-                          style: TextStyle(
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.w800,
-                            color: DPalette.inkSoft,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
+                      _adminBadge(),
                     ],
                   ],
                 ),
@@ -288,62 +542,139 @@ class UserManagementScreen extends ConsumerWidget {
               ],
             ),
           ),
-
-          // Actions menu
-          if (u.isCustomer)
-            PopupMenuButton<String>(
-              tooltip: 'Actions',
-              icon: const Icon(Icons.more_vert_rounded,
-                  color: DPalette.inkMuted, size: 20),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: const BorderSide(color: DPalette.hairline),
-              ),
-              color: Colors.white,
-              onSelected: (v) => _handleAction(context, ref, u, v),
-              itemBuilder: (_) => [
-                PopupMenuItem(
-                  value: u.isActive ? 'pause' : 'resume',
-                  child: Row(
-                    children: [
-                      Icon(
-                        u.isActive
-                            ? Icons.pause_circle_outline
-                            : Icons.play_circle_outline,
-                        size: 18,
-                        color: DPalette.ink,
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        u.isActive ? 'Pause account' : 'Resume account',
-                        style: const TextStyle(
-                          fontSize: 13.5,
-                          color: DPalette.ink,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'delete',
-                  child: Row(
-                    children: [
-                      Icon(Icons.delete_outline,
-                          size: 18, color: DPalette.alert),
-                      SizedBox(width: 10),
-                      Text(
-                        'Delete user',
-                        style: TextStyle(
-                          fontSize: 13.5,
-                          color: DPalette.alert,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+          if (u.isCustomer) _menuButton(context, ref, u),
         ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // SHARED BITS
+  // ===========================================================================
+  Widget _searchField(WidgetRef ref, {bool dense = false}) {
+    return TextField(
+      onChanged: (v) =>
+          ref.read(userSearchQueryProvider.notifier).state = v,
+      style: const TextStyle(
+        fontSize: 14,
+        color: DPalette.ink,
+        fontWeight: FontWeight.w500,
+      ),
+      decoration: InputDecoration(
+        hintText: 'Search by name or email',
+        hintStyle: const TextStyle(
+          color: DPalette.inkFaint,
+          fontSize: 13.5,
+          fontWeight: FontWeight.w400,
+        ),
+        prefixIcon: const Icon(
+          Icons.search_rounded,
+          size: 20,
+          color: DPalette.inkFaint,
+        ),
+        isDense: dense,
+        contentPadding: EdgeInsets.symmetric(
+          vertical: dense ? 12 : 14,
+          horizontal: 12,
+        ),
+        filled: true,
+        fillColor: DPalette.surface,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: DPalette.hairline),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: DPalette.hairline),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: DPalette.leaf, width: 1.5),
+        ),
+      ),
+    );
+  }
+
+  Widget _chip(
+    WidgetRef ref,
+    String label,
+    UserStatusFilter value,
+    UserStatusFilter current,
+  ) {
+    final selected = current == value;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) =>
+          ref.read(userStatusFilterProvider.notifier).state = value,
+      selectedColor: DPalette.leaf,
+      backgroundColor: DPalette.surface,
+      labelStyle: TextStyle(
+        color: selected ? Colors.white : DPalette.ink,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
+      side: BorderSide(
+        color: selected ? DPalette.leaf : DPalette.hairline,
+      ),
+      showCheckmark: false,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+    );
+  }
+
+  Widget _avatar(
+    AdminUser u, {
+    required double size,
+    required double radius,
+    required double fontSize,
+  }) {
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: u.isAdmin
+              ? [
+                  DPalette.inkSoft.withValues(alpha: 0.20),
+                  DPalette.inkSoft.withValues(alpha: 0.08),
+                ]
+              : [
+                  DPalette.leaf.withValues(alpha: 0.22),
+                  DPalette.leaf.withValues(alpha: 0.08),
+                ],
+        ),
+        borderRadius: BorderRadius.circular(radius),
+      ),
+      child: Text(
+        u.initials,
+        style: TextStyle(
+          fontSize: fontSize,
+          fontWeight: FontWeight.w800,
+          color: u.isAdmin ? DPalette.inkSoft : DPalette.leaf,
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+
+  Widget _adminBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: DPalette.chipNeutral,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: const Text(
+        'ADMIN',
+        style: TextStyle(
+          fontSize: 8.5,
+          fontWeight: FontWeight.w800,
+          color: DPalette.inkSoft,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }
@@ -365,6 +696,127 @@ class UserManagementScreen extends ConsumerWidget {
           fontWeight: FontWeight.w800,
           color: color,
           letterSpacing: 0.6,
+        ),
+      ),
+    );
+  }
+
+  Widget _statusPill({
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: color),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _menuButton(
+    BuildContext context,
+    WidgetRef ref,
+    AdminUser u,
+  ) {
+    return PopupMenuButton<String>(
+      tooltip: 'Actions',
+      icon: const Icon(
+        Icons.more_vert_rounded,
+        color: DPalette.inkMuted,
+        size: 20,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: DPalette.hairline),
+      ),
+      color: Colors.white,
+      onSelected: (v) => _handleAction(context, ref, u, v),
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: u.isActive ? 'pause' : 'resume',
+          child: Row(
+            children: [
+              Icon(
+                u.isActive
+                    ? Icons.pause_circle_outline
+                    : Icons.play_circle_outline,
+                size: 18,
+                color: DPalette.ink,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                u.isActive ? 'Pause account' : 'Resume account',
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  color: DPalette.ink,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'delete',
+          child: Row(
+            children: [
+              Icon(Icons.delete_outline,
+                  size: 18, color: DPalette.alert),
+              SizedBox(width: 10),
+              Text(
+                'Delete user',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  color: DPalette.alert,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<AdminUser> _applyFilters(
+    List<AdminUser> users,
+    UserStatusFilter filter,
+    String query,
+  ) {
+    var filtered = users;
+    if (filter == UserStatusFilter.active) {
+      filtered = filtered.where((u) => u.isActive).toList();
+    } else if (filter == UserStatusFilter.paused) {
+      filtered = filtered.where((u) => u.isPaused).toList();
+    }
+    if (query.isNotEmpty) {
+      filtered = filtered
+          .where((u) =>
+              u.name.toLowerCase().contains(query) ||
+              u.email.toLowerCase().contains(query))
+          .toList();
+    }
+    return filtered;
+  }
+
+  Widget _errorState(Object e) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(
+          'Error: $e',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 13,
+            color: DPalette.inkMuted,
+          ),
         ),
       ),
     );
@@ -453,8 +905,7 @@ class UserManagementScreen extends ConsumerWidget {
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor:
-                  destructive ? DPalette.alert : DPalette.leaf,
+              backgroundColor: destructive ? DPalette.alert : DPalette.leaf,
               foregroundColor: Colors.white,
               elevation: 0,
               padding:

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../dashboard/widgets/dashboard_palette.dart';
 import '../../expenses/expense_format.dart';
 import '../data/report_models.dart';
 import '../providers/report_providers.dart';
@@ -16,10 +17,22 @@ class FinancialSummaryScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final range = ref.watch(financialReportRangeProvider);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 1000;
+        if (isDesktop) return _buildDesktop(context, ref);
+        return _buildMobile(context, ref);
+      },
+    );
+  }
+
+  // ===========================================================================
+  // MOBILE (unchanged)
+  // ===========================================================================
+  Widget _buildMobile(BuildContext context, WidgetRef ref) {
     final kpis = ref.watch(financialKpisProvider);
+    final range = ref.watch(financialReportRangeProvider);
     final profitDelta = ref.watch(financialProfitDeltaProvider);
-    final trend = ref.watch(financialTrendProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -35,96 +48,319 @@ class FinancialSummaryScreen extends ConsumerWidget {
       ),
       body: ListView(
         padding: EdgeInsets.zero,
+        children: _buildContent(context, ref, isDesktop: false),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // DESKTOP
+  // ===========================================================================
+  Widget _buildDesktop(BuildContext context, WidgetRef ref) {
+    final kpis = ref.watch(financialKpisProvider);
+    final range = ref.watch(financialReportRangeProvider);
+    final profitDelta = ref.watch(financialProfitDeltaProvider);
+
+    return Scaffold(
+      backgroundColor: DPalette.canvas,
+      body: Column(
         children: [
-          const SizedBox(height: 8),
-          ReportPeriodBar(
-            current: range,
-            onChanged: (r) =>
-                ref.read(financialReportRangeProvider.notifier).state = r,
-            onCustomTap: () => _pickCustom(context, ref, range),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: ReportRangeInfo(
-              range: range,
-              trailing: kpis.isEmpty
-                  ? null
-                  : formatShortKsh(kpis.netProfit),
-            ),
-          ),
-          if (kpis.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: ReportEmptyState(
-                icon: Icons.account_balance_outlined,
-                title: 'Nothing to summarise yet',
-                message:
-                    'Record sales, expenses or labour in this period to see profit.',
-              ),
-            )
-          else ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-              child: _ProfitHero(kpis: kpis),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: KpiGrid(items: _kpiItems(kpis, profitDelta)),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _marginRow(kpis),
-            ),
-            if (kpis.hasLabourExclusion) ...[
-              const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _LabourNote(kpis: kpis),
-              ),
-            ],
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _comparisonSection(range, profitDelta),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ReportSection(
-                title: 'Where the money went',
-                subtitle: _compositionSubtitle(kpis),
-                child: _Composition(kpis: kpis),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ReportSection(
-                title: 'Revenue vs cost',
-                subtitle: _trendSubtitle(trend),
-                child: DualTrendBars(
-                  points: trend,
-                  positiveColor: _revenueGreen,
-                  negativeColor: _costOrange,
+          _buildDesktopHeader(context, kpis, range, profitDelta),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1400),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: _buildContent(context, ref, isDesktop: true),
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ReportSection(
-                title: 'Monthly profit',
-                subtitle: _profitTrendSubtitle(trend),
-                child: _ProfitBars(points: trend),
-              ),
-            ),
-            const SizedBox(height: 32),
-          ],
+          ),
         ],
       ),
     );
+  }
+
+  Widget _buildDesktopHeader(
+    BuildContext context,
+    FinancialKpis kpis,
+    ReportRange range,
+    PeriodDelta profitDelta,
+  ) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(32, 18, 32, 18),
+      decoration: const BoxDecoration(
+        color: DPalette.surface,
+        border: Border(bottom: BorderSide(color: DPalette.hairline)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF1B5E20), _revenueGreen],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: _revenueGreen.withValues(alpha: 0.25),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Icon(Icons.account_balance_outlined,
+                color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Financial Summary',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: DPalette.ink,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Revenue, costs and net profit in one view.',
+                  style: TextStyle(fontSize: 13, color: DPalette.inkMuted),
+                ),
+              ],
+            ),
+          ),
+          if (!kpis.isEmpty)
+            OutlinedButton.icon(
+              onPressed: () => _copySummary(context, range, kpis, profitDelta),
+              icon: const Icon(Icons.copy_all_outlined, size: 18),
+              label: const Text('Copy summary'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: DPalette.ink,
+                side: const BorderSide(color: DPalette.hairline),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // SHARED CONTENT
+  // ===========================================================================
+  List<Widget> _buildContent(
+    BuildContext context,
+    WidgetRef ref, {
+    bool isDesktop = false,
+  }) {
+    final range = ref.watch(financialReportRangeProvider);
+    final kpis = ref.watch(financialKpisProvider);
+    final profitDelta = ref.watch(financialProfitDeltaProvider);
+    final trend = ref.watch(financialTrendProvider);
+
+    if (kpis.isEmpty) {
+      return [
+        const SizedBox(height: 8),
+        ReportPeriodBar(
+          current: range,
+          onChanged: (r) =>
+              ref.read(financialReportRangeProvider.notifier).state = r,
+          onCustomTap: () => _pickCustom(context, ref, range),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: ReportRangeInfo(range: range),
+        ),
+        const Padding(
+          padding: EdgeInsets.all(16),
+          child: ReportEmptyState(
+            icon: Icons.account_balance_outlined,
+            title: 'Nothing to summarise yet',
+            message:
+                'Record sales, expenses or labour in this period to see profit.',
+          ),
+        ),
+      ];
+    }
+
+    // Pre-built sections
+    final compositionSection = ReportSection(
+      title: 'Where the money went',
+      subtitle: _compositionSubtitle(kpis),
+      child: _Composition(kpis: kpis),
+    );
+
+    final revenueVsCostSection = ReportSection(
+      title: 'Revenue vs cost',
+      subtitle: _trendSubtitle(trend),
+      child: DualTrendBars(
+        points: trend,
+        positiveColor: _revenueGreen,
+        negativeColor: _costOrange,
+      ),
+    );
+
+    final monthlyProfitSection = ReportSection(
+      title: 'Monthly profit',
+      subtitle: _profitTrendSubtitle(trend),
+      child: _ProfitBars(points: trend),
+    );
+
+    final labourNote =
+        kpis.hasLabourExclusion ? _LabourNote(kpis: kpis) : null;
+
+    final comparison = _comparisonSection(range, profitDelta);
+
+    if (isDesktop) {
+      return [
+        const SizedBox(height: 8),
+        ReportPeriodBar(
+          current: range,
+          onChanged: (r) =>
+              ref.read(financialReportRangeProvider.notifier).state = r,
+          onCustomTap: () => _pickCustom(context, ref, range),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: ReportRangeInfo(
+            range: range,
+            trailing: formatShortKsh(kpis.netProfit),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+          child: _ProfitHero(kpis: kpis),
+        ),
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: KpiGrid(
+            items: _kpiItems(kpis, profitDelta),
+            columns: 4,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: _marginRow(kpis),
+        ),
+        if (labourNote != null) ...[
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: labourNote,
+          ),
+        ],
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: comparison,
+        ),
+
+        // Composition | Revenue vs cost — side by side
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: compositionSection),
+                const SizedBox(width: 16),
+                Expanded(child: revenueVsCostSection),
+              ],
+            ),
+          ),
+        ),
+
+        // Monthly profit — full width
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: monthlyProfitSection,
+        ),
+        const SizedBox(height: 32),
+      ];
+    }
+
+    // Mobile — original stacking order preserved
+    return [
+      const SizedBox(height: 8),
+      ReportPeriodBar(
+        current: range,
+        onChanged: (r) =>
+            ref.read(financialReportRangeProvider.notifier).state = r,
+        onCustomTap: () => _pickCustom(context, ref, range),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: ReportRangeInfo(
+          range: range,
+          trailing: formatShortKsh(kpis.netProfit),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+        child: _ProfitHero(kpis: kpis),
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: KpiGrid(items: _kpiItems(kpis, profitDelta)),
+      ),
+      const SizedBox(height: 12),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: _marginRow(kpis),
+      ),
+      if (labourNote != null) ...[
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: labourNote,
+        ),
+      ],
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: comparison,
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: compositionSection,
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: revenueVsCostSection,
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: monthlyProfitSection,
+      ),
+      const SizedBox(height: 32),
+    ];
   }
 
   // -------------------------------------------------------------------------
@@ -265,7 +501,7 @@ class FinancialSummaryScreen extends ConsumerWidget {
   }
 
   // -------------------------------------------------------------------------
-  // Copy
+  // Subtitles
   // -------------------------------------------------------------------------
   String _compositionSubtitle(FinancialKpis k) {
     if (k.revenue <= 0) return 'No revenue to break down';
@@ -281,8 +517,7 @@ class FinancialSummaryScreen extends ConsumerWidget {
 
   String _profitTrendSubtitle(List<DualTrendPoint> points) {
     if (points.isEmpty) return '';
-    final positive =
-        points.where((p) => p.profit > 0).length;
+    final positive = points.where((p) => p.profit > 0).length;
     return '$positive of ${points.length} months profitable';
   }
 
@@ -484,14 +719,12 @@ class _Composition extends StatelessWidget {
     final labour = kpis.labour;
     final profit = kpis.netProfit;
 
-    // Bar scale = max(revenue, totalCost) so a loss shows an overhang.
     final scaleBase = [revenue, kpis.totalCost].reduce((a, b) => a > b ? a : b);
     if (scaleBase <= 0) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Revenue bar
         _bar(
           label: 'Revenue',
           value: revenue,
@@ -500,7 +733,6 @@ class _Composition extends StatelessWidget {
           fillPct: revenue / scaleBase,
         ),
         const SizedBox(height: 14),
-        // Split bar
         Text(
           'Split of revenue',
           style: TextStyle(
@@ -589,7 +821,6 @@ class _Composition extends StatelessWidget {
     double labour,
     double profit,
   ) {
-    // Base = revenue when profitable, else total cost so loss is visible.
     final base = profit >= 0 ? revenue : expenses + labour;
     if (base <= 0) return const SizedBox.shrink();
 

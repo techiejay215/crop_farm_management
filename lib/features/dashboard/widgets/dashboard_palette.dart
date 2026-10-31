@@ -14,17 +14,17 @@ class DPalette {
   static const Color sageDeep    = Color(0xFFBFDCC9);
 
   // ─── Ink ─────────────────────────────────────────────
-  static const Color ink      = Color(0xFF0F1A15);
-  static const Color inkSoft  = Color(0xFF3A4640);
-  static const Color inkMuted = Color(0xFF6B7873);
-  static const Color inkFaint = Color(0xFF96A29C);
+  static const Color ink      = Color(0xFF1A202C);
+  static const Color inkSoft  = Color(0xFF4A5568);
+  static const Color inkMuted = Color(0xFF718096);
+  static const Color inkFaint = Color(0xFFA0AEC0);
 
   // ─── Surfaces ────────────────────────────────────────
   static const Color surface         = Color(0xFFFFFFFF);
   static const Color surfaceTint     = Color(0xFFF6FBF7);
   static const Color surfaceTintWarm = Color(0xFFFBF8F2);
-  static const Color canvas          = Color(0xFFF4F7F4);
-  static const Color hairline        = Color(0xFFDCE7E0);
+  static const Color canvas          = Color(0xFFF8F9FA);
+  static const Color hairline        = Color(0xFFE2E8F0);
   static const Color hairlineStrong  = Color(0xFFC9D9CF);
 
   // ─── Financial ───────────────────────────────────────
@@ -46,45 +46,38 @@ class DPalette {
   static const Color alertEdge = Color(0xFFE5D2A8);
 
   // ─── Icon colour families ────────────────────────────
-  // Green — home, net profit, brand identity
   static const Color iconGreen      = Color(0xFF0B5D3B);
-  static const Color iconGreenTint  = Color(0xFFC8E2D2);
+  static const Color iconGreenTint  = Color(0xFFF0FFF4);
 
-  // Olive — crops, growing things
-  static const Color iconOlive      = Color(0xFF4A7C3F);
-  static const Color iconOliveTint  = Color(0xFFD6E5CA);
+  static const Color iconOlive      = Color(0xFF556B2F);
+  static const Color iconOliveTint  = Color(0xFFF0F5E8);
 
-  // Fresh — sales, transactions
   static const Color iconFresh      = Color(0xFF1F8A5B);
   static const Color iconFreshTint  = Color(0xFFC5E6D5);
 
-  // Gold — expenses, harvest
-  static const Color iconGold       = Color(0xFFA8761E);
-  static const Color iconGoldTint   = Color(0xFFF0DFB8);
+  static const Color iconGold       = Color(0xFFB7791F);
+  static const Color iconGoldTint   = Color(0xFFFEFCBF);
 
-  // Earth — labour, wages
   static const Color iconEarth      = Color(0xFF7A5A2E);
   static const Color iconEarthTint  = Color(0xFFE6D6B8);
 
-  // Slate — misc / settings
   static const Color iconSlate      = Color(0xFF3E5F4A);
   static const Color iconSlateTint  = Color(0xFFCFDDD2);
 
-  // ─── NEW — Blue: farms, revenue ──────────────────────
-  static const Color iconBlue       = Color(0xFF1E5B96);
-  static const Color iconBlueTint   = Color(0xFFD2E4F5);
+  static const Color iconBlue       = Color(0xFF2C5282);
+  static const Color iconBlueTint   = Color(0xFFEBF8FF);
 
-  // ─── NEW — Teal: yield, production ───────────────────
-  static const Color iconTeal       = Color(0xFF0E6E78);
-  static const Color iconTealTint   = Color(0xFFC9E4E8);
+  static const Color iconTeal       = Color(0xFF285E61);
+  static const Color iconTealTint   = Color(0xFFE6FFFA);
 
-  // ─── NEW — Purple: analytics, margin, more ──────────
-  static const Color iconPurple     = Color(0xFF5B3D8F);
-  static const Color iconPurpleTint = Color(0xFFE1D7F0);
+  static const Color iconPurple     = Color(0xFF553C9A);
+  static const Color iconPurpleTint = Color(0xFFE9D8FD);
 
-  // ─── NEW — Berry: pending, owed, alerts ─────────────
-  static const Color iconBerry      = Color(0xFF92376A);
-  static const Color iconBerryTint  = Color(0xFFF0D4E1);
+  static const Color iconBerry      = Color(0xFF97266D);
+  static const Color iconBerryTint  = Color(0xFFFED7E2);
+
+  static const Color iconRed        = Color(0xFFC53030);
+  static const Color iconRedTint    = Color(0xFFFED7D7);
 
   // ─── Legacy chip aliases ─────────────────────────────
   static const Color chipGreen   = sage;
@@ -99,18 +92,27 @@ class DPalette {
     stops: [0.0, 0.55, 1.0],
   );
 
-  /// Much lighter than before — image shows through clearly on the right,
-  /// only dark enough on the left for the white text to stay readable.
   static const LinearGradient heroOverlayGradient = LinearGradient(
     begin: Alignment.centerLeft,
     end: Alignment.centerRight,
     colors: [
-      Color(0xA80B5D3B),   // was 0xE0 — 25% lighter
-      Color(0x550B5D3B),   // was 0xA6 — 50% lighter
-      Color(0x120B5D3B),   // was 0x33 — 65% lighter
+      Color(0xA80B5D3B),
+      Color(0x550B5D3B),
+      Color(0x120B5D3B),
     ],
     stops: [0.0, 0.55, 1.0],
   );
+
+  static LinearGradient cardGradient(Color tint) {
+    return LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        Colors.white,
+        tint.withValues(alpha: 0.3),
+      ],
+    );
+  }
 
   // ─── Elevation ───────────────────────────────────────
   static List<BoxShadow> softShadow({Color? tint}) => [
@@ -123,17 +125,22 @@ class DPalette {
 
   static const List<BoxShadow> cardShadow = [
     BoxShadow(
-      color: Color(0x140B5D3B),
-      blurRadius: 16,
-      offset: Offset(0, 4),
+      color: Color(0x0A000000),
+      blurRadius: 24,
+      offset: Offset(0, 8),
+    ),
+    BoxShadow(
+      color: Color(0x05000000),
+      blurRadius: 4,
+      offset: Offset(0, 2),
     ),
   ];
 
   static const List<BoxShadow> liftedShadow = [
     BoxShadow(
-      color: Color(0x1A0B5D3B),
-      blurRadius: 22,
-      offset: Offset(0, 8),
+      color: Color(0x14000000),
+      blurRadius: 32,
+      offset: Offset(0, 12),
     ),
   ];
 
@@ -144,26 +151,12 @@ class DPalette {
     double radius = 14,
   }) {
     return BoxDecoration(
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Color.lerp(tint, Colors.white, 0.55)!,
-          tint,
-        ],
-      ),
+      color: tint,
       borderRadius: BorderRadius.circular(radius),
       border: Border.all(
-        color: accent.withValues(alpha: 0.18),
+        color: accent.withValues(alpha: 0.15),
         width: 1,
       ),
-      boxShadow: [
-        BoxShadow(
-          color: accent.withValues(alpha: 0.13),
-          blurRadius: 10,
-          offset: const Offset(0, 4),
-        ),
-      ],
     );
   }
 
@@ -181,4 +174,19 @@ class DPalette {
   static const Color chipBlue    = sage;
   static const Color sky         = brand;
   static const Color rose        = alert;
+
+  // ===========================================================================
+  // DESKTOP KPI / SIDEBAR ALIASES  (new)
+  // ===========================================================================
+  static const Color kpiGreenIcon  = iconGreen;
+  static const Color kpiGreenBg    = iconGreenTint;
+  static const Color kpiBlueIcon   = iconBlue;
+  static const Color kpiBlueBg     = iconBlueTint;
+  static const Color kpiPurpleIcon = iconPurple;
+  static const Color kpiPurpleBg   = iconPurpleTint;
+  static const Color kpiGoldIcon   = iconGold;
+  static const Color kpiGoldBg     = iconGoldTint;
+
+  static const Color sidebarActive = Color(0xFFE4F1E9);
+  static const Color sidebarBg     = Color(0xFFF4F8F5);
 }

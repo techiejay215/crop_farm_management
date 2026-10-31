@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../dashboard/widgets/dashboard_palette.dart';
 import '../../expenses/expense_format.dart';
 import '../../labour/data/labour_model.dart';
 import '../../labour/data/labour_style.dart';
@@ -14,13 +15,24 @@ class LabourReportScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final range = ref.watch(labourReportRangeProvider);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 1000;
+        if (isDesktop) return _buildDesktop(context, ref);
+        return _buildMobile(context, ref);
+      },
+    );
+  }
+
+  // ===========================================================================
+  // MOBILE (unchanged)
+  // ===========================================================================
+  Widget _buildMobile(BuildContext context, WidgetRef ref) {
     final kpis = ref.watch(labourKpisProvider);
+    final range = ref.watch(labourReportRangeProvider);
     final delta = ref.watch(labourDeltaProvider);
     final byWorker = ref.watch(labourByWorkerProvider);
     final byTask = ref.watch(labourByTaskProvider);
-    final trend = ref.watch(labourMonthlyTrendProvider);
-    final top = ref.watch(topLabourProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -37,95 +49,332 @@ class LabourReportScreen extends ConsumerWidget {
       ),
       body: ListView(
         padding: EdgeInsets.zero,
+        children: _buildContent(context, ref, isDesktop: false),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // DESKTOP
+  // ===========================================================================
+  Widget _buildDesktop(BuildContext context, WidgetRef ref) {
+    final kpis = ref.watch(labourKpisProvider);
+    final range = ref.watch(labourReportRangeProvider);
+    final delta = ref.watch(labourDeltaProvider);
+    final byWorker = ref.watch(labourByWorkerProvider);
+    final byTask = ref.watch(labourByTaskProvider);
+
+    return Scaffold(
+      backgroundColor: DPalette.canvas,
+      body: Column(
         children: [
-          const SizedBox(height: 8),
-          ReportPeriodBar(
-            current: range,
-            onChanged: (r) =>
-                ref.read(labourReportRangeProvider.notifier).state = r,
-            onCustomTap: () => _pickCustom(context, ref, range),
+          _buildDesktopHeader(
+            context,
+            kpis,
+            range,
+            delta,
+            byWorker,
+            byTask,
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: ReportRangeInfo(
-              range: range,
-              trailing: kpis.isEmpty ? null : formatShortKsh(kpis.totalCost),
-            ),
-          ),
-          if (kpis.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: ReportEmptyState(
-                icon: Icons.groups_outlined,
-                title: 'No labour in this period',
-                message:
-                    'Try a wider range, or record some worker wages first.',
-              ),
-            )
-          else ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-              child: KpiGrid(items: _kpiItems(kpis, delta)),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _secondaryRow(kpis),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _comparisonSection(range, delta),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ReportSection(
-                title: 'Cost by worker',
-                subtitle: byWorker.length > 5
-                    ? 'Top 5 of ${byWorker.length}'
-                    : '${byWorker.length} ${byWorker.length == 1 ? 'worker' : 'workers'}',
-                child: _breakdown(
-                  byWorker.take(5).toList(),
-                  Icons.person_outline,
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1400),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: _buildContent(context, ref, isDesktop: true),
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ReportSection(
-                title: 'Cost by task',
-                subtitle: '${byTask.length} ${byTask.length == 1 ? 'task' : 'tasks'}',
-                child: _breakdown(byTask.take(6).toList(), Icons.task_alt_outlined),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ReportSection(
-                title: 'Monthly labour cost',
-                subtitle: _trendSubtitle(trend),
-                child: TrendBars(
-                  points: trend,
-                  barColor: LabourStyle.primary,
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ReportSection(
-                title: 'Biggest wage records',
-                subtitle: 'Top ${top.length} of ${kpis.totalRecords}',
-                child: _topList(top),
-              ),
-            ),
-            const SizedBox(height: 32),
-          ],
+          ),
         ],
       ),
     );
+  }
+
+  Widget _buildDesktopHeader(
+    BuildContext context,
+    LabourKpis kpis,
+    ReportRange range,
+    PeriodDelta delta,
+    List<BreakdownRow> byWorker,
+    List<BreakdownRow> byTask,
+  ) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(32, 18, 32, 18),
+      decoration: const BoxDecoration(
+        color: DPalette.surface,
+        border: Border(bottom: BorderSide(color: DPalette.hairline)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  LabourStyle.primaryDeep,
+                  LabourStyle.primary,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: LabourStyle.primary.withValues(alpha: 0.25),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Icon(Icons.groups_outlined,
+                color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Labour Report',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: DPalette.ink,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Wages, workers, tasks and outstanding payments.',
+                  style: TextStyle(fontSize: 13, color: DPalette.inkMuted),
+                ),
+              ],
+            ),
+          ),
+          if (!kpis.isEmpty)
+            OutlinedButton.icon(
+              onPressed: () => _copySummary(
+                  context, range, kpis, delta, byWorker, byTask),
+              icon: const Icon(Icons.copy_all_outlined, size: 18),
+              label: const Text('Copy summary'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: DPalette.ink,
+                side: const BorderSide(color: DPalette.hairline),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // SHARED CONTENT
+  // ===========================================================================
+  List<Widget> _buildContent(
+    BuildContext context,
+    WidgetRef ref, {
+    bool isDesktop = false,
+  }) {
+    final range = ref.watch(labourReportRangeProvider);
+    final kpis = ref.watch(labourKpisProvider);
+    final delta = ref.watch(labourDeltaProvider);
+    final byWorker = ref.watch(labourByWorkerProvider);
+    final byTask = ref.watch(labourByTaskProvider);
+    final trend = ref.watch(labourMonthlyTrendProvider);
+    final top = ref.watch(topLabourProvider);
+
+    if (kpis.isEmpty) {
+      return [
+        const SizedBox(height: 8),
+        ReportPeriodBar(
+          current: range,
+          onChanged: (r) =>
+              ref.read(labourReportRangeProvider.notifier).state = r,
+          onCustomTap: () => _pickCustom(context, ref, range),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: ReportRangeInfo(range: range),
+        ),
+        const Padding(
+          padding: EdgeInsets.all(16),
+          child: ReportEmptyState(
+            icon: Icons.groups_outlined,
+            title: 'No labour in this period',
+            message:
+                'Try a wider range, or record some worker wages first.',
+          ),
+        ),
+      ];
+    }
+
+    // Pre-built sections
+    final workerSection = ReportSection(
+      title: 'Cost by worker',
+      subtitle: byWorker.length > 5
+          ? 'Top 5 of ${byWorker.length}'
+          : '${byWorker.length} ${byWorker.length == 1 ? 'worker' : 'workers'}',
+      child: _breakdown(
+        byWorker.take(5).toList(),
+        Icons.person_outline,
+      ),
+    );
+
+    final taskSection = ReportSection(
+      title: 'Cost by task',
+      subtitle:
+          '${byTask.length} ${byTask.length == 1 ? 'task' : 'tasks'}',
+      child: _breakdown(byTask.take(6).toList(), Icons.task_alt_outlined),
+    );
+
+    final trendSection = ReportSection(
+      title: 'Monthly labour cost',
+      subtitle: _trendSubtitle(trend),
+      child: TrendBars(
+        points: trend,
+        barColor: LabourStyle.primary,
+      ),
+    );
+
+    final topSection = ReportSection(
+      title: 'Biggest wage records',
+      subtitle: 'Top ${top.length} of ${kpis.totalRecords}',
+      child: _topList(top),
+    );
+
+    final comparison = _comparisonSection(range, delta);
+
+    if (isDesktop) {
+      return [
+        const SizedBox(height: 8),
+        ReportPeriodBar(
+          current: range,
+          onChanged: (r) =>
+              ref.read(labourReportRangeProvider.notifier).state = r,
+          onCustomTap: () => _pickCustom(context, ref, range),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: ReportRangeInfo(
+            range: range,
+            trailing: formatShortKsh(kpis.totalCost),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+          child: KpiGrid(items: _kpiItems(kpis, delta), columns: 4),
+        ),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: _secondaryRow(kpis),
+        ),
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: comparison,
+        ),
+
+        // Cost by worker | Cost by task
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: workerSection),
+                const SizedBox(width: 16),
+                Expanded(child: taskSection),
+              ],
+            ),
+          ),
+        ),
+
+        // Monthly labour cost | Biggest wage records
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: trendSection),
+                const SizedBox(width: 16),
+                Expanded(child: topSection),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 32),
+      ];
+    }
+
+    // Mobile — original stacking order preserved
+    return [
+      const SizedBox(height: 8),
+      ReportPeriodBar(
+        current: range,
+        onChanged: (r) =>
+            ref.read(labourReportRangeProvider.notifier).state = r,
+        onCustomTap: () => _pickCustom(context, ref, range),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: ReportRangeInfo(
+          range: range,
+          trailing: formatShortKsh(kpis.totalCost),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+        child: KpiGrid(items: _kpiItems(kpis, delta)),
+      ),
+      const SizedBox(height: 12),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: _secondaryRow(kpis),
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: comparison,
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: workerSection,
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: taskSection,
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: trendSection,
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: topSection,
+      ),
+      const SizedBox(height: 32),
+    ];
   }
 
   List<KpiData> _kpiItems(LabourKpis k, PeriodDelta d) {
@@ -139,7 +388,7 @@ class LabourReportScreen extends ConsumerWidget {
             ? null
             : '${d.isUp ? '+' : ''}${pct.toStringAsFixed(1)}% vs prev',
         deltaIsUp: pct == null ? null : d.isUp,
-        deltaIsPositive: pct == null ? null : !d.isUp, // up = bad for cost
+        deltaIsPositive: pct == null ? null : !d.isUp,
         color: LabourStyle.primary,
       ),
       KpiData(
@@ -245,7 +494,7 @@ class LabourReportScreen extends ConsumerWidget {
       currentLabel: formatKsh(d.current),
       previousLabel: 'Previous period: ${formatKsh(d.previous)}',
       delta: d,
-      positiveWhenUp: false, // up = bad (labour cost)
+      positiveWhenUp: false,
     );
   }
 

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../dashboard/widgets/dashboard_palette.dart';
 import '../../crops/providers/crop_provider.dart' show selectedFarmIdProvider;
 import '../../expenses/expense_format.dart';
 import '../../farms/data/farm_model.dart';
@@ -47,6 +48,39 @@ class _SaleInvoiceScreenState extends ConsumerState<SaleInvoiceScreen> {
     final farmsAsync = ref.watch(farmsStreamProvider);
     final paymentAsync = ref.watch(farmPaymentInfoProvider);
 
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 1000;
+        if (isDesktop) {
+          return _buildDesktopLayout(
+            context,
+            farmId,
+            salesAsync,
+            farmsAsync,
+            paymentAsync,
+          );
+        }
+        return _buildMobileLayout(
+          context,
+          farmId,
+          salesAsync,
+          farmsAsync,
+          paymentAsync,
+        );
+      },
+    );
+  }
+
+  // ===========================================================================
+  // MOBILE LAYOUT (unchanged)
+  // ===========================================================================
+  Widget _buildMobileLayout(
+    BuildContext context,
+    String farmId,
+    AsyncValue<List<Sale>> salesAsync,
+    AsyncValue<List<Farm>> farmsAsync,
+    AsyncValue<FarmPaymentInfo?> paymentAsync,
+  ) {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
@@ -78,50 +112,214 @@ class _SaleInvoiceScreenState extends ConsumerState<SaleInvoiceScreen> {
             tooltip: 'Print',
             onPressed: _downloading
                 ? null
-                : () async {
-                    final sale = salesAsync.value
-                        ?.where((s) => s.id == widget.saleId)
-                        .firstOrNull;
-                    if (sale == null) return;
-                    final farm = farmsAsync.value
-                        ?.where((f) => f.id == farmId)
-                        .firstOrNull;
-                    final payment = paymentAsync.value;
-                    setState(() => _downloading = true);
-                    try {
-                      await InvoicePdfService.printInvoice(
-                        sale: sale,
-                        farm: farm,
-                        payment: payment,
-                      );
-                    } catch (e) {
-                      if (mounted) _snack('Print failed: $e');
-                    } finally {
-                      if (mounted) setState(() => _downloading = false);
-                    }
-                  },
+                : () => _print(salesAsync, farmsAsync, paymentAsync, farmId),
           ),
         ],
       ),
-      body: salesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
-        data: (sales) {
-          final sale =
-              sales.where((s) => s.id == widget.saleId).firstOrNull;
-          if (sale == null) {
-            return const Center(child: Text('Sale not found.'));
-          }
+      body: _buildBody(salesAsync, farmsAsync, paymentAsync, farmId),
+    );
+  }
 
-          return farmsAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Error: $e')),
-            data: (farms) {
-              final farm = farms.where((f) => f.id == farmId).firstOrNull;
-              final payment = paymentAsync.value;
-              return Column(
-                children: [
-                  Expanded(
+  // ===========================================================================
+  // DESKTOP LAYOUT
+  // ===========================================================================
+  Widget _buildDesktopLayout(
+    BuildContext context,
+    String farmId,
+    AsyncValue<List<Sale>> salesAsync,
+    AsyncValue<List<Farm>> farmsAsync,
+    AsyncValue<FarmPaymentInfo?> paymentAsync,
+  ) {
+    final sale =
+        salesAsync.value?.where((s) => s.id == widget.saleId).firstOrNull;
+
+    return Scaffold(
+      backgroundColor: DPalette.canvas,
+      body: Column(
+        children: [
+          _buildDesktopHeader(context, sale, salesAsync, farmsAsync,
+              paymentAsync, farmId),
+          Expanded(
+            child: _buildBody(
+              salesAsync,
+              farmsAsync,
+              paymentAsync,
+              farmId,
+              isDesktop: true,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopHeader(
+    BuildContext context,
+    Sale? sale,
+    AsyncValue<List<Sale>> salesAsync,
+    AsyncValue<List<Farm>> farmsAsync,
+    AsyncValue<FarmPaymentInfo?> paymentAsync,
+    String farmId,
+  ) {
+    final farm =
+        farmsAsync.value?.where((f) => f.id == farmId).firstOrNull;
+    final farmName = (farm?.farmName.isNotEmpty ?? false)
+        ? farm!.farmName
+        : 'GreenHarvest';
+    final invNo = sale != null
+        ? InvoicePdfService.invoiceNumber(sale)
+        : 'INV-…';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 18),
+      decoration: const BoxDecoration(
+        color: DPalette.surface,
+        border: Border(bottom: BorderSide(color: DPalette.hairline)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back, color: DPalette.ink),
+            tooltip: 'Back to sales',
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/sales');
+              }
+            },
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Invoice Preview',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: DPalette.ink,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$invNo · $farmName',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: DPalette.inkMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          OutlinedButton.icon(
+            onPressed: sale == null
+                ? null
+                : () => _copyInvoice(context, sale),
+            icon: const Icon(Icons.copy_all_outlined, size: 18),
+            label: const Text('Copy'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: DPalette.ink,
+              side: const BorderSide(color: DPalette.hairline),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          OutlinedButton.icon(
+            onPressed: (_downloading || sale == null)
+                ? null
+                : () => _print(
+                    salesAsync, farmsAsync, paymentAsync, farmId),
+            icon: const Icon(Icons.print_outlined, size: 18),
+            label: const Text('Print'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: DPalette.ink,
+              side: const BorderSide(color: DPalette.hairline),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton.icon(
+            onPressed: (_downloading || sale == null)
+                ? null
+                : () => _download(sale, farm, paymentAsync.value),
+            icon: _downloading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.download_outlined, size: 18),
+            label: Text(_downloading ? 'Preparing…' : 'Download PDF'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: DPalette.brand,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 14,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              elevation: 0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // SHARED BODY
+  // ===========================================================================
+  Widget _buildBody(
+    AsyncValue<List<Sale>> salesAsync,
+    AsyncValue<List<Farm>> farmsAsync,
+    AsyncValue<FarmPaymentInfo?> paymentAsync,
+    String farmId, {
+    bool isDesktop = false,
+  }) {
+    return salesAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Error: $e')),
+      data: (sales) {
+        final sale =
+            sales.where((s) => s.id == widget.saleId).firstOrNull;
+        if (sale == null) {
+          return const Center(child: Text('Sale not found.'));
+        }
+
+        return farmsAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(child: Text('Error: $e')),
+          data: (farms) {
+            final farm = farms.where((f) => f.id == farmId).firstOrNull;
+            final payment = paymentAsync.value;
+
+            if (isDesktop) {
+              return SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 880),
                     child: _InvoicePreview(
                       sale: sale,
                       farm: farm,
@@ -130,19 +328,36 @@ class _SaleInvoiceScreenState extends ConsumerState<SaleInvoiceScreen> {
                           context.push('/settings/payment-info'),
                     ),
                   ),
-                  _DownloadBar(
-                    loading: _downloading,
-                    onDownload: () => _download(sale, farm, payment),
-                  ),
-                ],
+                ),
               );
-            },
-          );
-        },
-      ),
+            }
+
+            return Column(
+              children: [
+                Expanded(
+                  child: _InvoicePreview(
+                    sale: sale,
+                    farm: farm,
+                    payment: payment,
+                    onEditPayment: () =>
+                        context.push('/settings/payment-info'),
+                  ),
+                ),
+                _DownloadBar(
+                  loading: _downloading,
+                  onDownload: () => _download(sale, farm, payment),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
+  // ===========================================================================
+  // ACTIONS
+  // ===========================================================================
   Future<void> _download(
     Sale sale,
     Farm? farm,
@@ -158,6 +373,32 @@ class _SaleInvoiceScreenState extends ConsumerState<SaleInvoiceScreen> {
       if (mounted) _snack('Invoice ready — choose where to save');
     } catch (e) {
       if (mounted) _snack('Download failed: $e');
+    } finally {
+      if (mounted) setState(() => _downloading = false);
+    }
+  }
+
+  Future<void> _print(
+    AsyncValue<List<Sale>> salesAsync,
+    AsyncValue<List<Farm>> farmsAsync,
+    AsyncValue<FarmPaymentInfo?> paymentAsync,
+    String farmId,
+  ) async {
+    final sale =
+        salesAsync.value?.where((s) => s.id == widget.saleId).firstOrNull;
+    if (sale == null) return;
+    final farm = farmsAsync.value?.where((f) => f.id == farmId).firstOrNull;
+    final payment = paymentAsync.value;
+
+    setState(() => _downloading = true);
+    try {
+      await InvoicePdfService.printInvoice(
+        sale: sale,
+        farm: farm,
+        payment: payment,
+      );
+    } catch (e) {
+      if (mounted) _snack('Print failed: $e');
     } finally {
       if (mounted) setState(() => _downloading = false);
     }
@@ -192,7 +433,7 @@ class _SaleInvoiceScreenState extends ConsumerState<SaleInvoiceScreen> {
 }
 
 // ===========================================================================
-// DOWNLOAD BAR
+// DOWNLOAD BAR (mobile only)
 // ===========================================================================
 class _DownloadBar extends StatelessWidget {
   final bool loading;
@@ -247,7 +488,7 @@ class _DownloadBar extends StatelessWidget {
 }
 
 // ===========================================================================
-// INVOICE PREVIEW
+// INVOICE PREVIEW (unchanged)
 // ===========================================================================
 class _InvoicePreview extends StatelessWidget {
   final Sale sale;
@@ -318,7 +559,6 @@ class _InvoicePreview extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // ---- Logo ----
           Container(
             width: 52,
             height: 52,
@@ -346,7 +586,6 @@ class _InvoicePreview extends StatelessWidget {
                   ),
           ),
           const SizedBox(width: 16),
-          // ---- Farm details ----
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -387,7 +626,6 @@ class _InvoicePreview extends StatelessWidget {
               ],
             ),
           ),
-          // ---- INVOICE wordmark ----
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -438,15 +676,9 @@ class _InvoicePreview extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
       child: Row(
         children: [
-          _metaCell(
-            'ISSUE DATE',
-            d != null ? fullDate(d) : '—',
-          ),
+          _metaCell('ISSUE DATE', d != null ? fullDate(d) : '—'),
           _metaDivider(),
-          _metaCell(
-            'ISSUE TIME',
-            d != null ? _timeOf(d) : '—',
-          ),
+          _metaCell('ISSUE TIME', d != null ? _timeOf(d) : '—'),
           _metaDivider(),
           _metaCell(
             'PAYMENT STATUS',
@@ -557,7 +789,6 @@ class _InvoicePreview extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 16),
-          // ---- Summary pill ----
           Container(
             padding: const EdgeInsets.symmetric(
               horizontal: 14,
@@ -613,7 +844,6 @@ class _InvoicePreview extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ---- Table header ----
           Container(
             padding: const EdgeInsets.symmetric(vertical: 8),
             decoration: const BoxDecoration(
@@ -677,7 +907,6 @@ class _InvoicePreview extends StatelessWidget {
               ],
             ),
           ),
-          // ---- Item row ----
           Container(
             padding: const EdgeInsets.symmetric(vertical: 14),
             decoration: const BoxDecoration(
@@ -859,7 +1088,6 @@ class _InvoicePreview extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header row
             Row(
               children: [
                 Container(
@@ -909,7 +1137,6 @@ class _InvoicePreview extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            // Two-column grid
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

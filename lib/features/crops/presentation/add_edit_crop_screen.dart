@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../dashboard/widgets/dashboard_palette.dart';
 import '../../expenses/expense_format.dart';
 import '../data/crop_model.dart';
 import '../data/crop_style.dart';
 import '../providers/crop_provider.dart';
+
+const _maxContent = 560.0;
 
 class AddEditCropScreen extends ConsumerStatefulWidget {
   final String? cropId;
@@ -127,7 +130,6 @@ class _AddEditCropScreenState extends ConsumerState<AddEditCropScreen> {
       if (!_isEditing) {
         await repo.addCrop(farmId, crop);
       } else {
-        // Explicit nulls so clearing a date actually clears it in Firestore.
         final data = crop.toFirestore()
           ..['plantingDate'] = crop.plantingDate != null
               ? crop.toFirestore()['plantingDate']
@@ -153,6 +155,8 @@ class _AddEditCropScreenState extends ConsumerState<AddEditCropScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20)),
         title: const Text('Delete crop?'),
         content: const Text('This cannot be undone.'),
         actions: [
@@ -162,7 +166,8 @@ class _AddEditCropScreenState extends ConsumerState<AddEditCropScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text('Delete',
+                style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -198,7 +203,23 @@ class _AddEditCropScreenState extends ConsumerState<AddEditCropScreen> {
       if (_isEditing && !_loadedExisting) _prefill();
     });
 
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 1000;
+        if (isDesktop) return _buildDesktop(context);
+        return _buildMobile(context);
+      },
+    );
+  }
+
+  // ===========================================================================
+  // MOBILE (unchanged)
+  // ===========================================================================
+  Widget _buildMobile(BuildContext context) {
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+
     return Scaffold(
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
         title: Text(_isEditing ? 'Edit Crop' : 'New Crop'),
         actions: [
@@ -212,205 +233,502 @@ class _AddEditCropScreenState extends ConsumerState<AddEditCropScreen> {
       ),
       body: Form(
         key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-          children: [
-            _StageHero(
-              name: _nameCtrl.text.trim(),
-              variety: _varietyCtrl.text.trim(),
-              stage: _stage,
-              acreage: double.tryParse(_acreageCtrl.text) ?? 0,
-              plants: int.tryParse(_plantsCtrl.text) ?? 0,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: _maxContent),
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(20, 20, 20, 40 + bottomInset),
+              children: _buildFormFields(),
             ),
-            const SizedBox(height: 24),
-            TextFormField(
-              controller: _nameCtrl,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Crop name',
-                hintText: 'e.g. Tomatoes',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.grass_outlined),
-              ),
-              onChanged: (_) => setState(() {}),
-              validator: (v) =>
-                  (v ?? '').trim().isEmpty ? 'Required' : null,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _varietyCtrl,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Variety (optional)',
-                hintText: 'e.g. Roma, Cherry',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.local_florist_outlined),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _locationCtrl,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Location',
-                hintText: 'Field A / Greenhouse 1',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.place_outlined),
-              ),
-            ),
-            const SizedBox(height: 20),
-            _label('Growth stage'),
-            const SizedBox(height: 8),
-            _stageRow(),
-            const SizedBox(height: 20),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _plantsCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Plants',
-                      hintText: 'e.g. 500',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    controller: _acreageCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'Acreage',
-                      suffixText: 'ac',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            _label('Dates'),
-            const SizedBox(height: 8),
-            _DateTile(
-              // FIX: Icons.sprout_outlined does not exist in Material Icons.
-              // Using local_florist_outlined as the closest "plant / seeded" icon.
-              icon: Icons.local_florist_outlined,
-              label: 'Planted',
-              date: _plantingDate,
-              onTap: () => _pickDate(isPlanting: true),
-              onClear: _plantingDate == null
-                  ? null
-                  : () => setState(() => _plantingDate = null),
-            ),
-            const SizedBox(height: 10),
-            _DateTile(
-              icon: Icons.event_available_outlined,
-              label: 'Expected harvest',
-              date: _expectedHarvest,
-              onTap: () => _pickDate(isPlanting: false),
-              onClear: _expectedHarvest == null
-                  ? null
-                  : () => setState(() => _expectedHarvest = null),
-              accent: CropStyle.ready,
-            ),
-            const SizedBox(height: 32),
-            SizedBox(
-              height: 52,
-              child: ElevatedButton(
-                onPressed: _loading ? null : _save,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryGreen,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                child: _loading
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.4,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(
-                        _isEditing ? 'Save Changes' : 'Create Crop',
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _label(String text) => Text(
-        text,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: Colors.black54,
+  // ===========================================================================
+  // DESKTOP
+  // ===========================================================================
+  Widget _buildDesktop(BuildContext context) {
+    return Scaffold(
+      backgroundColor: DPalette.canvas,
+      body: Column(
+        children: [
+          _buildDesktopHeader(context),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1180),
+                  child: Form(
+                    key: _formKey,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: _buildFormFields(),
+                          ),
+                        ),
+                        const SizedBox(width: 24),
+                        SizedBox(
+                          width: 360,
+                          child: _buildSidebar(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopHeader(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(32, 18, 32, 18),
+      decoration: const BoxDecoration(
+        color: DPalette.surface,
+        border: Border(bottom: BorderSide(color: DPalette.hairline)),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back, color: DPalette.ink),
+            tooltip: 'Back',
+            onPressed: () => Navigator.pop(context),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _isEditing ? 'Edit Crop' : 'New Crop',
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: DPalette.ink,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _isEditing
+                      ? 'Update crop details and growth stage.'
+                      : 'Create a new crop and start tracking production.',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: DPalette.inkMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_isEditing)
+            TextButton.icon(
+              onPressed: _loading ? null : _confirmDelete,
+              icon: const Icon(Icons.delete_outline, size: 18),
+              label: const Text('Delete'),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFC62828),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // LIVE HERO SIDEBAR
+  // ===========================================================================
+  Widget _buildSidebar() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _StageHero(
+          name: _nameCtrl.text.trim(),
+          variety: _varietyCtrl.text.trim(),
+          stage: _stage,
+          acreage: double.tryParse(_acreageCtrl.text) ?? 0,
+          plants: int.tryParse(_plantsCtrl.text) ?? 0,
+        ),
+        const SizedBox(height: 16),
+        // Dates info card
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: DPalette.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: DPalette.hairline),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'KEY DATES',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.2,
+                  color: DPalette.inkMuted,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _sidebarInfoRow(
+                'Planted',
+                _plantingDate == null ? 'Not set' : fullDate(_plantingDate!),
+                _plantingDate != null,
+              ),
+              const SizedBox(height: 8),
+              _sidebarInfoRow(
+                'Harvest',
+                _expectedHarvest == null
+                    ? 'Not set'
+                    : fullDate(_expectedHarvest!),
+                _expectedHarvest != null,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _sidebarInfoRow(String label, String value, bool isSet) {
+    return Row(
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: DPalette.inkMuted,
+          ),
+        ),
+        const Spacer(),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: isSet ? DPalette.ink : DPalette.inkMuted,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ===========================================================================
+  // SHARED FORM FIELDS
+  // ===========================================================================
+  List<Widget> _buildFormFields() {
+    return [
+      // Mobile-only: hero at the top
+      LayoutBuilder(
+        builder: (context, constraints) {
+          final isDesktop = constraints.maxWidth >= 600;
+          if (isDesktop) return const SizedBox.shrink();
+          return Column(
+            children: [
+              _StageHero(
+                name: _nameCtrl.text.trim(),
+                variety: _varietyCtrl.text.trim(),
+                stage: _stage,
+                acreage: double.tryParse(_acreageCtrl.text) ?? 0,
+                plants: int.tryParse(_plantsCtrl.text) ?? 0,
+              ),
+              const SizedBox(height: 26),
+            ],
+          );
+        },
+      ),
+      _sectionLabel('Basics'),
+      const SizedBox(height: 10),
+      TextFormField(
+        controller: _nameCtrl,
+        textCapitalization: TextCapitalization.words,
+        decoration: const InputDecoration(
+          labelText: 'Crop name',
+          hintText: 'e.g. Tomatoes',
+          border: OutlineInputBorder(),
+          prefixIcon: Icon(Icons.grass_outlined),
+        ),
+        onChanged: (_) => setState(() {}),
+        validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null,
+      ),
+      const SizedBox(height: 14),
+      TextFormField(
+        controller: _varietyCtrl,
+        textCapitalization: TextCapitalization.words,
+        onChanged: (_) => setState(() {}),
+        decoration: const InputDecoration(
+          labelText: 'Variety (optional)',
+          hintText: 'e.g. Roma, Cherry',
+          border: OutlineInputBorder(),
+          prefixIcon: Icon(Icons.local_florist_outlined),
+        ),
+      ),
+      const SizedBox(height: 14),
+      TextFormField(
+        controller: _locationCtrl,
+        textCapitalization: TextCapitalization.words,
+        decoration: const InputDecoration(
+          labelText: 'Location',
+          hintText: 'Field A / Greenhouse 1',
+          border: OutlineInputBorder(),
+          prefixIcon: Icon(Icons.place_outlined),
+        ),
+      ),
+      const SizedBox(height: 24),
+      _sectionLabel('Growth stage'),
+      const SizedBox(height: 10),
+      LayoutBuilder(
+        builder: (context, constraints) {
+          final isDesktop = constraints.maxWidth >= 600;
+          return isDesktop ? _stageRowDesktop() : _stageRow();
+        },
+      ),
+      const SizedBox(height: 24),
+      _sectionLabel('Size'),
+      const SizedBox(height: 10),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: TextFormField(
+              controller: _plantsCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Plants',
+                hintText: 'e.g. 500',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextFormField(
+              controller: _acreageCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Acreage',
+                suffixText: 'ac',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 24),
+      _sectionLabel('Dates'),
+      const SizedBox(height: 10),
+      _DateTile(
+        icon: Icons.local_florist_outlined,
+        label: 'Planted',
+        date: _plantingDate,
+        onTap: () => _pickDate(isPlanting: true),
+        onClear: _plantingDate == null
+            ? null
+            : () => setState(() => _plantingDate = null),
+      ),
+      const SizedBox(height: 12),
+      _DateTile(
+        icon: Icons.event_available_outlined,
+        label: 'Expected harvest',
+        date: _expectedHarvest,
+        onTap: () => _pickDate(isPlanting: false),
+        onClear: _expectedHarvest == null
+            ? null
+            : () => setState(() => _expectedHarvest = null),
+        accent: CropStyle.ready,
+      ),
+      const SizedBox(height: 34),
+      SizedBox(
+        height: 54,
+        child: ElevatedButton(
+          onPressed: _loading ? null : _save,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.primaryGreen,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          child: _loading
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    color: Colors.white,
+                  ),
+                )
+              : Text(
+                  _isEditing ? 'Save Changes' : 'Create Crop',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+        ),
+      ),
+    ];
+  }
+
+  Widget _sectionLabel(String text) => Text(
+        text.toUpperCase(),
+        style: TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.8,
+          color: Colors.black.withValues(alpha: 0.45),
         ),
       );
 
+  // ---- Mobile stage picker: horizontal scroll (unchanged) ----
   Widget _stageRow() {
-    return Row(
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: CropStyle.stages.map((s) {
+          final selected = _stage == s;
+          final color = CropStyle.stageColor(s);
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: SizedBox(
+              width: 92,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () => setState(() => _stage = s),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color:
+                          selected ? color : Theme.of(context).cardColor,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: selected
+                            ? color
+                            : Colors.black.withValues(alpha: 0.07),
+                      ),
+                      boxShadow: selected
+                          ? [
+                              BoxShadow(
+                                color: color.withValues(alpha: 0.28),
+                                blurRadius: 14,
+                                offset: const Offset(0, 6),
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          CropStyle.stageIcon(s),
+                          size: 22,
+                          color: selected ? Colors.white : Colors.black45,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          CropStyle.stageShort(s),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
+                            color: selected ? Colors.white : Colors.black87,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  // ---- Desktop stage picker: Wrap, all visible at once ----
+  Widget _stageRowDesktop() {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
       children: CropStyle.stages.map((s) {
         final selected = _stage == s;
         final color = CropStyle.stageColor(s);
-        return Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () => setState(() => _stage = s),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    color: selected
-                        ? color.withValues(alpha: 0.13)
-                        : Colors.black.withValues(alpha: 0.02),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: selected
-                          ? color.withValues(alpha: 0.6)
-                          : Colors.black.withValues(alpha: 0.1),
-                      width: selected ? 1.4 : 1,
+        return SizedBox(
+          width: 120,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: () => setState(() => _stage = s),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                decoration: BoxDecoration(
+                  color: selected ? color : DPalette.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: selected ? color : DPalette.hairline,
+                  ),
+                  boxShadow: selected
+                      ? [
+                          BoxShadow(
+                            color: color.withValues(alpha: 0.28),
+                            blurRadius: 14,
+                            offset: const Offset(0, 6),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      CropStyle.stageIcon(s),
+                      size: 22,
+                      color: selected ? Colors.white : DPalette.inkMuted,
                     ),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        CropStyle.stageIcon(s),
-                        size: 20,
-                        color: selected ? color : Colors.black45,
+                    const SizedBox(height: 8),
+                    Text(
+                      CropStyle.stageShort(s),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.3,
+                        color: selected ? Colors.white : DPalette.ink,
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        CropStyle.stageShort(s),
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.3,
-                          color: selected ? color : Colors.black87,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -422,7 +740,7 @@ class _AddEditCropScreenState extends ConsumerState<AddEditCropScreen> {
 }
 
 // ===========================================================================
-// Hero preview card
+// Hero preview card (unchanged)
 // ===========================================================================
 class _StageHero extends StatelessWidget {
   const _StageHero({
@@ -441,18 +759,16 @@ class _StageHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = CropStyle.stageColor(stage);
-
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(22),
         gradient: CropStyle.heroGradient,
         boxShadow: [
           BoxShadow(
-            color: CropStyle.primary.withValues(alpha: 0.24),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
+            color: CropStyle.primary.withValues(alpha: 0.28),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
           ),
         ],
       ),
@@ -462,42 +778,42 @@ class _StageHero extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(10),
+                  color: Colors.white.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   CropStyle.stageIcon(stage),
                   color: Colors.white,
-                  size: 18,
+                  size: 20,
                 ),
               ),
               const SizedBox(width: 10),
               Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(6),
+                  color: Colors.white.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   CropStyle.stageShort(stage),
                   style: const TextStyle(
                     fontSize: 9.5,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: 0.4,
+                    letterSpacing: 0.5,
                     color: Colors.white,
                   ),
                 ),
               ),
               const Spacer(),
               Icon(Icons.grass_outlined,
-                  size: 18, color: Colors.white.withValues(alpha: 0.7)),
+                  size: 20, color: Colors.white.withValues(alpha: 0.7)),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
@@ -508,9 +824,9 @@ class _StageHero extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
                     color: name.isEmpty
                         ? Colors.white.withValues(alpha: 0.55)
                         : Colors.white,
@@ -519,21 +835,25 @@ class _StageHero extends StatelessWidget {
               ),
               if (variety.isNotEmpty) ...[
                 const SizedBox(width: 8),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: Text(
-                    variety,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white.withValues(alpha: 0.75),
+                Flexible(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Text(
+                      variety,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white.withValues(alpha: 0.75),
+                      ),
                     ),
                   ),
                 ),
               ],
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Row(
             children: [
               Text(
@@ -555,12 +875,16 @@ class _StageHero extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  '${acreage == acreage.roundToDouble() ? acreage.toStringAsFixed(0) : acreage.toStringAsFixed(1)} acres',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white.withValues(alpha: 0.8),
+                Flexible(
+                  child: Text(
+                    '${acreage == acreage.roundToDouble() ? acreage.toStringAsFixed(0) : acreage.toStringAsFixed(1)} acres',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withValues(alpha: 0.8),
+                    ),
                   ),
                 ),
               ],
@@ -573,7 +897,7 @@ class _StageHero extends StatelessWidget {
 }
 
 // ===========================================================================
-// Date tile
+// Date tile (unchanged)
 // ===========================================================================
 class _DateTile extends StatelessWidget {
   const _DateTile({
@@ -598,57 +922,62 @@ class _DateTile extends StatelessWidget {
     final hasDate = date != null;
     final now = DateTime.now();
 
-    // Add "in X days" / "X days ago" context when available.
-    String? context;
+    String? hint;
     if (hasDate) {
       final diff = date!.difference(now).inDays;
       if (diff > 0) {
-        context = CropStyle.daysLabel(diff);
+        hint = CropStyle.daysLabel(diff);
       } else if (diff < 0) {
-        context = '${-diff} days ago';
+        hint = '${-diff} days ago';
       } else {
-        context = 'Today';
+        hint = 'Today';
       }
     }
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: hasDate
                   ? color.withValues(alpha: 0.4)
-                  : Colors.black.withValues(alpha: 0.12),
+                  : Colors.black.withValues(alpha: 0.08),
             ),
-            color: hasDate ? color.withValues(alpha: 0.04) : null,
+            color: hasDate
+                ? color.withValues(alpha: 0.05)
+                : Theme.of(context).cardColor,
           ),
           child: Row(
             children: [
               Icon(icon, size: 18, color: color),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
                         color: Colors.black.withValues(alpha: 0.5),
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
                       hasDate ? fullDate(date!) : 'Not set',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                         color: hasDate
                             ? Colors.black87
                             : Colors.black.withValues(alpha: 0.4),
@@ -657,13 +986,21 @@ class _DateTile extends StatelessWidget {
                   ],
                 ),
               ),
-              if (context != null)
-                Text(
-                  context,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                    color: color,
+              if (hint != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    hint,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      color: color,
+                    ),
                   ),
                 ),
               if (onClear != null) ...[

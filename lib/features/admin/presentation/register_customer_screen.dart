@@ -40,7 +40,6 @@ class _RegisterCustomerScreenState
     setState(() => _loading = true);
 
     try {
-      // Create a secondary Firebase app so admin session is not overwritten
       final tempApp = await Firebase.initializeApp(
         name: 'temp_${DateTime.now().millisecondsSinceEpoch}',
         options: Firebase.app().options,
@@ -113,6 +112,19 @@ class _RegisterCustomerScreenState
     final isAdmin = ref.watch(isAdminProvider);
     if (!isAdmin) return const _AccessDenied();
 
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 1000;
+        if (isDesktop) return _buildDesktop(context);
+        return _buildMobile(context);
+      },
+    );
+  }
+
+  // ===========================================================================
+  // MOBILE
+  // ===========================================================================
+  Widget _buildMobile(BuildContext context) {
     return Scaffold(
       backgroundColor: DPalette.canvas,
       appBar: AppBar(
@@ -147,9 +159,105 @@ class _RegisterCustomerScreenState
     );
   }
 
-  Widget _header() {
+  // ===========================================================================
+  // DESKTOP
+  // ===========================================================================
+  Widget _buildDesktop(BuildContext context) {
+    return Scaffold(
+      backgroundColor: DPalette.canvas,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1200),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _desktopHeader(),
+                const SizedBox(height: 24),
+                _header(isDesktop: true),
+                const SizedBox(height: 28),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 5,
+                      child: _form(isDesktop: true),
+                    ),
+                    const SizedBox(width: 24),
+                    Expanded(
+                      flex: 4,
+                      child: _previewPanel(),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _desktopHeader() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Register Customer',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: DPalette.ink,
+                  letterSpacing: -0.8,
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Create an account for a farm owner on the platform.',
+                style: TextStyle(fontSize: 14, color: DPalette.inkMuted),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: DPalette.chipGreen,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.shield_outlined,
+                  size: 13, color: DPalette.leaf),
+              SizedBox(width: 6),
+              Text(
+                'ADMIN ONLY',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  color: DPalette.leaf,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ===========================================================================
+  // HEADER
+  // ===========================================================================
+  Widget _header({bool isDesktop = false}) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(isDesktop ? 24 : 20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
@@ -159,32 +267,42 @@ class _RegisterCustomerScreenState
             Color(0xFF2F855A),
           ],
         ),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(isDesktop ? 22 : 18),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF14532D).withValues(alpha: 0.22),
+            blurRadius: 22,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Row(
         children: [
           Container(
-            width: 46,
-            height: 46,
+            width: isDesktop ? 54 : 46,
+            height: isDesktop ? 54 : 46,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.25)),
+              borderRadius: BorderRadius.circular(14),
+              border:
+                  Border.all(color: Colors.white.withValues(alpha: 0.25)),
             ),
-            child:
-                const Icon(Icons.person_add_alt_1, color: Colors.white, size: 22),
+            child: Icon(
+              Icons.person_add_alt_1,
+              color: Colors.white,
+              size: isDesktop ? 26 : 22,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'New Customer',
                   style: TextStyle(
-                    fontSize: 17,
+                    fontSize: isDesktop ? 19 : 17,
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
                     letterSpacing: -0.4,
@@ -194,7 +312,7 @@ class _RegisterCustomerScreenState
                 Text(
                   'Create an account for a farm owner',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: isDesktop ? 13 : 12,
                     color: Colors.white.withValues(alpha: 0.85),
                     height: 1.3,
                   ),
@@ -207,20 +325,32 @@ class _RegisterCustomerScreenState
     );
   }
 
-  Widget _form() {
+  // ===========================================================================
+  // FORM
+  // ===========================================================================
+  Widget _form({bool isDesktop = false}) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isDesktop ? 28 : 24),
       decoration: BoxDecoration(
         color: DPalette.surface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: DPalette.hairline),
-        boxShadow: DPalette.softShadow(),
+        boxShadow: [
+          BoxShadow(
+            color: DPalette.leaf.withValues(alpha: 0.05),
+            blurRadius: 22,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Form(
         key: _formKey,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // ---- Identity section ----
+            _sectionLabel('IDENTITY'),
+            const SizedBox(height: 16),
             _fieldLabel('Full name'),
             const SizedBox(height: 6),
             TextFormField(
@@ -230,7 +360,7 @@ class _RegisterCustomerScreenState
               decoration: const InputDecoration(
                 hintText: 'e.g. James Mwangi',
                 prefixIcon: Icon(Icons.person_outline,
-                    size: 18, color: DPalette.inkFaint),
+                    size: 18, color: DPalette.leaf),
               ),
               validator: (v) => v!.trim().isEmpty ? 'Required' : null,
             ),
@@ -246,7 +376,7 @@ class _RegisterCustomerScreenState
               decoration: const InputDecoration(
                 hintText: 'james@farm.com',
                 prefixIcon: Icon(Icons.alternate_email,
-                    size: 18, color: DPalette.inkFaint),
+                    size: 18, color: DPalette.leaf),
               ),
               validator: (v) =>
                   !v!.contains('@') ? 'Enter a valid email' : null,
@@ -262,9 +392,14 @@ class _RegisterCustomerScreenState
               decoration: const InputDecoration(
                 hintText: '0712 345 678',
                 prefixIcon: Icon(Icons.phone_outlined,
-                    size: 18, color: DPalette.inkFaint),
+                    size: 18, color: DPalette.leaf),
               ),
             ),
+
+            const SizedBox(height: 24),
+
+            // ---- Credentials section ----
+            _sectionLabel('LOGIN CREDENTIALS'),
             const SizedBox(height: 16),
             _fieldLabel('Temporary password'),
             const SizedBox(height: 6),
@@ -276,7 +411,7 @@ class _RegisterCustomerScreenState
               decoration: InputDecoration(
                 hintText: 'Minimum 6 characters',
                 prefixIcon: const Icon(Icons.lock_outline,
-                    size: 18, color: DPalette.inkFaint),
+                    size: 18, color: DPalette.leaf),
                 suffixIcon: IconButton(
                   icon: Icon(
                     _obscurePassword
@@ -292,6 +427,7 @@ class _RegisterCustomerScreenState
               validator: (v) =>
                   v!.length < 6 ? 'At least 6 characters' : null,
             ),
+
             const SizedBox(height: 24),
             SizedBox(
               height: 52,
@@ -340,6 +476,216 @@ class _RegisterCustomerScreenState
     );
   }
 
+  // ===========================================================================
+  // DESKTOP PREVIEW PANEL
+  // ===========================================================================
+  Widget _previewPanel() {
+    return Container(
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: DPalette.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: DPalette.hairline),
+        boxShadow: [
+          BoxShadow(
+            color: DPalette.leaf.withValues(alpha: 0.05),
+            blurRadius: 22,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      DPalette.leaf.withValues(alpha: 0.22),
+                      DPalette.leaf.withValues(alpha: 0.10),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.auto_awesome_outlined,
+                    size: 20, color: DPalette.leaf),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'What they get',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: DPalette.ink,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Everything they need to start farming.',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: DPalette.inkMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          _previewItem(
+            icon: Icons.login_rounded,
+            title: 'Instant sign-in',
+            subtitle: 'The credentials you set work right away.',
+          ),
+          const SizedBox(height: 16),
+          _previewItem(
+            icon: Icons.space_dashboard_outlined,
+            title: 'Personal workspace',
+            subtitle: 'Their own farms, crops, and records.',
+          ),
+          const SizedBox(height: 16),
+          _previewItem(
+            icon: Icons.insights_outlined,
+            title: 'Full features',
+            subtitle: 'Harvesting, sales, expenses, and reports.',
+          ),
+
+          const SizedBox(height: 24),
+          const Divider(color: DPalette.hairline, height: 1),
+          const SizedBox(height: 16),
+
+          // Security note
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: DPalette.chipGreen,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: DPalette.leaf.withValues(alpha: 0.20),
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.security_outlined,
+                    size: 16, color: DPalette.leaf),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'You can pause or delete this account at any time from User Management.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.5,
+                      color: DPalette.inkSoft,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _previewItem({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                DPalette.leaf.withValues(alpha: 0.18),
+                DPalette.leaf.withValues(alpha: 0.08),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, size: 17, color: DPalette.leaf),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: DPalette.ink,
+                  letterSpacing: -0.1,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  fontSize: 12,
+                  height: 1.4,
+                  color: DPalette.inkMuted,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ===========================================================================
+  // SMALL HELPERS
+  // ===========================================================================
+  Widget _sectionLabel(String text) {
+    return Row(
+      children: [
+        Container(
+          width: 3,
+          height: 12,
+          decoration: BoxDecoration(
+            color: DPalette.leaf,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          text,
+          style: const TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w800,
+            color: DPalette.inkMuted,
+            letterSpacing: 1.4,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _fieldLabel(String text) {
     return Text(
       text,
@@ -353,6 +699,9 @@ class _RegisterCustomerScreenState
   }
 }
 
+// ===========================================================================
+// Access denied
+// ===========================================================================
 class _AccessDenied extends StatelessWidget {
   const _AccessDenied();
 
@@ -379,21 +728,28 @@ class _AccessDenied extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 64,
-                height: 64,
+                width: 72,
+                height: 72,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: DPalette.alertTint,
-                  borderRadius: BorderRadius.circular(18),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      DPalette.alert.withValues(alpha: 0.18),
+                      DPalette.alert.withValues(alpha: 0.08),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 child: const Icon(Icons.lock_outline_rounded,
-                    size: 28, color: DPalette.alert),
+                    size: 30, color: DPalette.alert),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 18),
               const Text(
                 'Administrators only',
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: 17,
                   fontWeight: FontWeight.w700,
                   color: DPalette.ink,
                   letterSpacing: -0.3,

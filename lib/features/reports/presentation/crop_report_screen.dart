@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../dashboard/widgets/dashboard_palette.dart';
 import '../../crops/data/crop_style.dart';
 import '../../expenses/expense_format.dart';
 import '../data/report_models.dart';
@@ -17,10 +18,21 @@ class CropReportScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final range = ref.watch(cropReportRangeProvider);
-    final reportAsync = ref.watch(cropReportProvider);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 1000;
+        if (isDesktop) return _buildDesktop(context, ref);
+        return _buildMobile(context, ref);
+      },
+    );
+  }
 
+  // ===========================================================================
+  // MOBILE (unchanged)
+  // ===========================================================================
+  Widget _buildMobile(BuildContext context, WidgetRef ref) {
     return Scaffold(
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
         title: const Text('Crop Report'),
         actions: [
@@ -35,109 +47,254 @@ class CropReportScreen extends ConsumerWidget {
         onRefresh: () async => ref.invalidate(cropReportProvider),
         child: ListView(
           padding: EdgeInsets.zero,
-          children: [
-            const SizedBox(height: 8),
-            ReportPeriodBar(
-              current: range,
-              onChanged: (r) =>
-                  ref.read(cropReportRangeProvider.notifier).state = r,
-              onCustomTap: () => _pickCustom(context, ref, range),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: ReportRangeInfo(range: range),
-            ),
-            reportAsync.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.all(48),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (e, _) => Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text('Error: $e'),
-              ),
-              data: (crops) {
-                final active =
-                    crops.where((c) => c.hasActivity).toList();
-                if (active.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: ReportEmptyState(
-                      icon: Icons.grass_outlined,
-                      title: 'Nothing to report yet',
-                      message:
-                          'Record crops, harvests or sales to see performance '
-                          'per crop type.',
-                    ),
-                  );
-                }
-
-                final totals = _Totals.fromCrops(active);
-
-                return Column(
-                  children: [
-                    const SizedBox(height: 20),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: _ProfitHero(totals: totals),
-                    ),
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: KpiGrid(items: _kpiItems(totals)),
-                    ),
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: ReportSection(
-                        title: 'Ranked by profit',
-                        subtitle:
-                            '${active.length} ${active.length == 1 ? 'crop' : 'crops'} · tap to open',
-                        child: _CropRanking(crops: active),
-                      ),
-                    ),
-                    if (active.any((c) => c.harvestCount > 0)) ...[
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: ReportSection(
-                          title: 'Yield by crop',
-                          subtitle: 'Net yield, dominant unit per crop',
-                          child: _YieldList(crops: active),
-                        ),
-                      ),
-                    ],
-                    if (active.any((c) => c.saleCount > 0)) ...[
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: ReportSection(
-                          title: 'Average sale price',
-                          subtitle: 'Revenue ÷ quantity sold, per crop',
-                          child: _PriceList(crops: active),
-                        ),
-                      ),
-                    ],
-                    if (active.any((c) => c.wasted > 0)) ...[
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: ReportSection(
-                          title: 'Waste by crop',
-                          subtitle: 'Highest waste first',
-                          child: _WasteList(crops: active),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 32),
-                  ],
-                );
-              },
-            ),
-          ],
+          children: _buildContent(context, ref, isDesktop: false),
         ),
       ),
     );
+  }
+
+  // ===========================================================================
+  // DESKTOP
+  // ===========================================================================
+  Widget _buildDesktop(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      backgroundColor: DPalette.canvas,
+      body: Column(
+        children: [
+          _buildDesktopHeader(context, ref),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async => ref.invalidate(cropReportProvider),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1400),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children:
+                          _buildContent(context, ref, isDesktop: true),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopHeader(BuildContext context, WidgetRef ref) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(32, 18, 32, 18),
+      decoration: const BoxDecoration(
+        color: DPalette.surface,
+        border: Border(bottom: BorderSide(color: DPalette.hairline)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: CropStyle.heroGradient.colors,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: CropStyle.primary.withValues(alpha: 0.25),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Icon(Icons.grass_outlined,
+                color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Crop Report',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: DPalette.ink,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Profitability, yield and price per crop.',
+                  style: TextStyle(fontSize: 13, color: DPalette.inkMuted),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh, color: DPalette.ink),
+            tooltip: 'Refresh',
+            onPressed: () => ref.invalidate(cropReportProvider),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // SHARED CONTENT
+  // ===========================================================================
+  List<Widget> _buildContent(
+    BuildContext context,
+    WidgetRef ref, {
+    bool isDesktop = false,
+  }) {
+    final range = ref.watch(cropReportRangeProvider);
+    final reportAsync = ref.watch(cropReportProvider);
+
+    return [
+      const SizedBox(height: 8),
+      ReportPeriodBar(
+        current: range,
+        onChanged: (r) =>
+            ref.read(cropReportRangeProvider.notifier).state = r,
+        onCustomTap: () => _pickCustom(context, ref, range),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: ReportRangeInfo(range: range),
+      ),
+      reportAsync.when(
+        loading: () => const Padding(
+          padding: EdgeInsets.all(48),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+        error: (e, _) => Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text('Error: $e'),
+        ),
+        data: (crops) {
+          final active = crops.where((c) => c.hasActivity).toList();
+          if (active.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: ReportEmptyState(
+                icon: Icons.grass_outlined,
+                title: 'Nothing to report yet',
+                message:
+                    'Record crops, harvests or sales to see performance '
+                    'per crop type.',
+              ),
+            );
+          }
+
+          final totals = _Totals.fromCrops(active);
+
+          // Secondary sections — yield, price, waste
+          final secondary = <Widget>[];
+          if (active.any((c) => c.harvestCount > 0)) {
+            secondary.add(ReportSection(
+              title: 'Yield by crop',
+              subtitle: 'Net yield, dominant unit per crop',
+              child: _YieldList(crops: active),
+            ));
+          }
+          if (active.any((c) => c.saleCount > 0)) {
+            secondary.add(ReportSection(
+              title: 'Average sale price',
+              subtitle: 'Revenue ÷ quantity sold, per crop',
+              child: _PriceList(crops: active),
+            ));
+          }
+          if (active.any((c) => c.wasted > 0)) {
+            secondary.add(ReportSection(
+              title: 'Waste by crop',
+              subtitle: 'Highest waste first',
+              child: _WasteList(crops: active),
+            ));
+          }
+
+          return Column(
+            children: [
+              const SizedBox(height: 20),
+
+              // Hero
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _ProfitHero(totals: totals),
+              ),
+              const SizedBox(height: 18),
+
+              // KPIs — 4 columns on desktop, 2 on mobile
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: KpiGrid(
+                  items: _kpiItems(totals),
+                  columns: isDesktop ? 4 : 2,
+                ),
+              ),
+              const SizedBox(height: 18),
+
+              // Ranked by profit — full width
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: ReportSection(
+                  title: 'Ranked by profit',
+                  subtitle:
+                      '${active.length} ${active.length == 1 ? 'crop' : 'crops'} · tap to open',
+                  child: _CropRanking(crops: active),
+                ),
+              ),
+
+              // Secondary sections — side-by-side on desktop, stacked on mobile
+              if (secondary.isNotEmpty) ...[
+                const SizedBox(height: 18),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _buildSecondaryLayout(secondary, isDesktop),
+                ),
+              ],
+
+              const SizedBox(height: 36),
+            ],
+          );
+        },
+      ),
+    ];
+  }
+
+  /// Lays out the yield / price / waste sections. On desktop, puts them
+  /// side-by-side when there's more than one; otherwise stacks them.
+  Widget _buildSecondaryLayout(
+    List<Widget> sections,
+    bool isDesktop,
+  ) {
+    if (isDesktop && sections.length >= 2) {
+      final rowChildren = <Widget>[];
+      for (var i = 0; i < sections.length; i++) {
+        if (i > 0) rowChildren.add(const SizedBox(width: 16));
+        rowChildren.add(Expanded(child: sections[i]));
+      }
+      return IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: rowChildren,
+        ),
+      );
+    }
+
+    final columnChildren = <Widget>[];
+    for (var i = 0; i < sections.length; i++) {
+      if (i > 0) columnChildren.add(const SizedBox(height: 18));
+      columnChildren.add(sections[i]);
+    }
+    return Column(children: columnChildren);
   }
 
   List<KpiData> _kpiItems(_Totals t) {
@@ -245,9 +402,9 @@ class _ProfitHero extends StatelessWidget {
     final accent = positive ? _profitGreen : _lossRed;
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(22),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -257,9 +414,9 @@ class _ProfitHero extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: accent.withValues(alpha: 0.25),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+            color: accent.withValues(alpha: 0.28),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
           ),
         ],
       ),
@@ -268,34 +425,51 @@ class _ProfitHero extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text(
-                positive ? 'Net profit from crops' : 'Net loss',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white.withValues(alpha: 0.8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.grass_outlined,
+                        size: 13, color: Colors.white),
+                    const SizedBox(width: 6),
+                    Text(
+                      positive ? 'Net profit from crops' : 'Net loss',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.2,
+                        color: Colors.white.withValues(alpha: 0.95),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const Spacer(),
-              Icon(Icons.grass_outlined,
-                  size: 18, color: Colors.white.withValues(alpha: 0.8)),
+              Icon(Icons.eco_outlined,
+                  size: 20, color: Colors.white.withValues(alpha: 0.85)),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 16),
           Text(
             '${positive ? '' : '−'}${formatKsh(profit.abs())}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontSize: 34,
-              fontWeight: FontWeight.w700,
+              fontSize: 36,
+              fontWeight: FontWeight.w800,
               color: Colors.white,
-              letterSpacing: -0.5,
+              letterSpacing: -1,
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 20),
           Divider(color: Colors.white.withValues(alpha: 0.18), height: 1),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           Row(
             children: [
               _stat('Revenue', formatShortKsh(totals.revenue)),
@@ -320,21 +494,24 @@ class _ProfitHero extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              label,
+              label.toUpperCase(),
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 9.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5,
                 color: Colors.white.withValues(alpha: 0.7),
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 5),
             Text(
               value,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w700,
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
                 color: Colors.white,
+                letterSpacing: -0.2,
               ),
             ),
           ],
@@ -343,14 +520,14 @@ class _ProfitHero extends StatelessWidget {
 
   Widget _divider() => Container(
         width: 1,
-        height: 28,
+        height: 30,
         margin: const EdgeInsets.symmetric(horizontal: 12),
         color: Colors.white.withValues(alpha: 0.18),
       );
 }
 
 // ===========================================================================
-// Ranked crops — now tappable
+// Ranked crops — tappable
 // ===========================================================================
 class _CropRanking extends StatelessWidget {
   const _CropRanking({required this.crops});
@@ -362,7 +539,7 @@ class _CropRanking extends StatelessWidget {
       children: [
         for (var i = 0; i < crops.length; i++) ...[
           if (i > 0)
-            Divider(height: 18, color: Colors.black.withValues(alpha: 0.05)),
+            Divider(height: 20, color: Colors.black.withValues(alpha: 0.05)),
           _row(context, crops[i], i + 1),
         ],
       ],
@@ -378,32 +555,32 @@ class _CropRanking extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         onTap: () => context.push(
           '/reports/crop/${Uri.encodeComponent(c.cropName)}/detail',
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
           child: Row(
             children: [
               Container(
-                width: 26,
-                height: 26,
+                width: 28,
+                height: 28,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(9),
                 ),
                 child: Text(
                   '$rank',
                   style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
                     color: color,
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -417,30 +594,30 @@ class _CropRanking extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               fontSize: 13.5,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 1),
+                              horizontal: 7, vertical: 2),
                           decoration: BoxDecoration(
-                            color: color.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(4),
+                            color: color.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
                             c.dominantUnit.toUpperCase(),
                             style: TextStyle(
                               fontSize: 8.5,
                               fontWeight: FontWeight.w800,
-                              letterSpacing: 0.3,
+                              letterSpacing: 0.4,
                               color: color,
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 4),
                     Text(
                       [
                         if (c.cropCount > 0) '${c.cropCount} planted',
@@ -466,8 +643,9 @@ class _CropRanking extends StatelessWidget {
                     '${positive ? '' : '−'}${formatKsh(profit.abs())}',
                     style: TextStyle(
                       fontSize: 13.5,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w800,
                       color: profitColor,
+                      letterSpacing: -0.2,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -484,8 +662,8 @@ class _CropRanking extends StatelessWidget {
               ),
               const SizedBox(width: 4),
               Icon(
-                Icons.chevron_right,
-                size: 18,
+                Icons.chevron_right_rounded,
+                size: 20,
                 color: Colors.black.withValues(alpha: 0.25),
               ),
             ],
@@ -511,14 +689,13 @@ class _YieldList extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final maxNet = withYield
-        .map((c) => c.netYield)
-        .reduce((a, b) => a > b ? a : b);
+    final maxNet =
+        withYield.map((c) => c.netYield).reduce((a, b) => a > b ? a : b);
 
     return Column(
       children: [
         for (var i = 0; i < withYield.length; i++) ...[
-          if (i > 0) const SizedBox(height: 14),
+          if (i > 0) const SizedBox(height: 16),
           _row(withYield[i], maxNet),
         ],
       ],
@@ -544,7 +721,7 @@ class _YieldList extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
@@ -552,16 +729,16 @@ class _YieldList extends StatelessWidget {
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 1),
+                          horizontal: 7, vertical: 2),
                       decoration: BoxDecoration(
                         color: wasteColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
                         '${(c.wasteRatio * 100).toStringAsFixed(0)}% waste',
                         style: TextStyle(
                           fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w800,
                           color: wasteColor,
                         ),
                       ),
@@ -574,18 +751,18 @@ class _YieldList extends StatelessWidget {
               formatQuantity(c.netYield, c.dominantUnit),
               style: const TextStyle(
                 fontSize: 12.5,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w800,
                 color: CropStyle.primaryDeep,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         ClipRRect(
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
             value: fill.clamp(0.0, 1.0),
-            minHeight: 5,
+            minHeight: 6,
             backgroundColor: CropStyle.primary.withValues(alpha: 0.08),
             valueColor: const AlwaysStoppedAnimation(CropStyle.primary),
           ),
@@ -610,10 +787,11 @@ class _PriceList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final withPrice =
-        crops.where((c) => c.saleCount > 0 && c.averagePricePerUnit > 0).toList()
-          ..sort((a, b) =>
-              b.averagePricePerUnit.compareTo(a.averagePricePerUnit));
+    final withPrice = crops
+        .where((c) => c.saleCount > 0 && c.averagePricePerUnit > 0)
+        .toList()
+      ..sort(
+          (a, b) => b.averagePricePerUnit.compareTo(a.averagePricePerUnit));
     if (withPrice.isEmpty) return const SizedBox.shrink();
 
     final maxPrice = withPrice
@@ -623,7 +801,7 @@ class _PriceList extends StatelessWidget {
     return Column(
       children: [
         for (var i = 0; i < withPrice.length; i++) ...[
-          if (i > 0) const SizedBox(height: 14),
+          if (i > 0) const SizedBox(height: 16),
           _row(withPrice[i], maxPrice),
         ],
       ],
@@ -645,7 +823,7 @@ class _PriceList extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
@@ -653,18 +831,18 @@ class _PriceList extends StatelessWidget {
               '${formatKsh(c.averagePricePerUnit)} / ${c.dominantUnit}',
               style: const TextStyle(
                 fontSize: 12.5,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w800,
                 color: Color(0xFF1E88E5),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         ClipRRect(
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
             value: fill.clamp(0.0, 1.0),
-            minHeight: 5,
+            minHeight: 6,
             backgroundColor: const Color(0xFF1E88E5).withValues(alpha: 0.08),
             valueColor: const AlwaysStoppedAnimation(Color(0xFF1E88E5)),
           ),
@@ -683,15 +861,14 @@ class _WasteList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final withWaste =
-        crops.where((c) => c.wasted > 0).toList()
-          ..sort((a, b) => b.wasteRatio.compareTo(a.wasteRatio));
+    final withWaste = crops.where((c) => c.wasted > 0).toList()
+      ..sort((a, b) => b.wasteRatio.compareTo(a.wasteRatio));
     if (withWaste.isEmpty) return const SizedBox.shrink();
 
     return Column(
       children: [
         for (var i = 0; i < withWaste.length; i++) ...[
-          if (i > 0) const SizedBox(height: 14),
+          if (i > 0) const SizedBox(height: 16),
           _row(withWaste[i]),
         ],
       ],
@@ -713,7 +890,7 @@ class _WasteList extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
@@ -721,35 +898,34 @@ class _WasteList extends StatelessWidget {
               formatQuantity(c.wasted, c.dominantUnit),
               style: TextStyle(
                 fontSize: 12.5,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w800,
                 color: color,
               ),
             ),
             const SizedBox(width: 8),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
                 '${(c.wasteRatio * 100).toStringAsFixed(1)}%',
                 style: TextStyle(
                   fontSize: 10,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w800,
                   color: color,
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         ClipRRect(
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
             value: c.wasteRatio.clamp(0.0, 1.0),
-            minHeight: 5,
+            minHeight: 6,
             backgroundColor: color.withValues(alpha: 0.08),
             valueColor: AlwaysStoppedAnimation(color),
           ),

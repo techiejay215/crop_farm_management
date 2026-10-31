@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../dashboard/widgets/dashboard_palette.dart';
 import '../../expenses/expense_format.dart';
 import '../../farms/data/farm_style.dart';
 import '../data/report_models.dart';
@@ -16,9 +17,19 @@ class FarmReportScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final range = ref.watch(farmReportRangeProvider);
-    final reportAsync = ref.watch(farmReportProvider);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 1000;
+        if (isDesktop) return _buildDesktop(context, ref);
+        return _buildMobile(context, ref);
+      },
+    );
+  }
 
+  // ===========================================================================
+  // MOBILE (unchanged)
+  // ===========================================================================
+  Widget _buildMobile(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Farm Report'),
@@ -34,102 +45,261 @@ class FarmReportScreen extends ConsumerWidget {
         onRefresh: () async => ref.invalidate(farmReportProvider),
         child: ListView(
           padding: EdgeInsets.zero,
-          children: [
-            const SizedBox(height: 8),
-            ReportPeriodBar(
-              current: range,
-              onChanged: (r) =>
-                  ref.read(farmReportRangeProvider.notifier).state = r,
-              onCustomTap: () => _pickCustom(context, ref, range),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: ReportRangeInfo(range: range),
-            ),
-            reportAsync.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.all(48),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (e, _) => Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text('Error: $e'),
-              ),
-              data: (farms) {
-                final active = farms.where((f) => f.hasActivity).toList();
-                if (active.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: ReportEmptyState(
-                      icon: Icons.agriculture_outlined,
-                      title: 'Nothing to report yet',
-                      message:
-                          'Record sales, expenses or harvests on a farm to see '
-                          'it here.',
-                    ),
-                  );
-                }
-
-                final totals = _Totals.fromFarms(active);
-
-                return Column(
-                  children: [
-                    const SizedBox(height: 20),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: _ProfitHero(totals: totals),
-                    ),
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: KpiGrid(items: _kpiItems(totals)),
-                    ),
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: ReportSection(
-                        title: 'Ranked by profit',
-                        subtitle:
-                            '${active.length} ${active.length == 1 ? 'farm' : 'farms'}',
-                        child: _FarmRanking(farms: active),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: ReportSection(
-                        title: 'Cost composition',
-                        subtitle: 'Where money goes per farm',
-                        child: _CostComposition(farms: active),
-                      ),
-                    ),
-                    if (active.any((f) => f.harvestCount > 0)) ...[
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: ReportSection(
-                          title: 'Yield by farm',
-                          subtitle: 'Net yield, dominant unit per farm',
-                          child: _YieldList(farms: active),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 32),
-                  ],
-                );
-              },
-            ),
-          ],
+          children: _buildContent(context, ref, isDesktop: false),
         ),
       ),
     );
   }
 
+  // ===========================================================================
+  // DESKTOP
+  // ===========================================================================
+  Widget _buildDesktop(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      backgroundColor: DPalette.canvas,
+      body: Column(
+        children: [
+          _buildDesktopHeader(context, ref),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async => ref.invalidate(farmReportProvider),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1400),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children:
+                          _buildContent(context, ref, isDesktop: true),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopHeader(BuildContext context, WidgetRef ref) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(32, 18, 32, 18),
+      decoration: const BoxDecoration(
+        color: DPalette.surface,
+        border: Border(bottom: BorderSide(color: DPalette.hairline)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [FarmStyle.primaryDeep, FarmStyle.primary],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: FarmStyle.primary.withValues(alpha: 0.25),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Icon(Icons.agriculture_outlined,
+                color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Farm Report',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: DPalette.ink,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Production, costs and revenue per farm.',
+                  style: TextStyle(fontSize: 13, color: DPalette.inkMuted),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh, color: DPalette.ink),
+            tooltip: 'Refresh',
+            onPressed: () => ref.invalidate(farmReportProvider),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // SHARED CONTENT
+  // ===========================================================================
+  List<Widget> _buildContent(
+    BuildContext context,
+    WidgetRef ref, {
+    bool isDesktop = false,
+  }) {
+    final range = ref.watch(farmReportRangeProvider);
+    final reportAsync = ref.watch(farmReportProvider);
+
+    return [
+      const SizedBox(height: 8),
+      ReportPeriodBar(
+        current: range,
+        onChanged: (r) =>
+            ref.read(farmReportRangeProvider.notifier).state = r,
+        onCustomTap: () => _pickCustom(context, ref, range),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: ReportRangeInfo(range: range),
+      ),
+      reportAsync.when(
+        loading: () => const Padding(
+          padding: EdgeInsets.all(48),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+        error: (e, _) => Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text('Error: $e'),
+        ),
+        data: (farms) {
+          final active = farms.where((f) => f.hasActivity).toList();
+          if (active.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: ReportEmptyState(
+                icon: Icons.agriculture_outlined,
+                title: 'Nothing to report yet',
+                message:
+                    'Record sales, expenses or harvests on a farm to see '
+                    'it here.',
+              ),
+            );
+          }
+
+          final totals = _Totals.fromFarms(active);
+
+          final rankedSection = ReportSection(
+            title: 'Ranked by profit',
+            subtitle:
+                '${active.length} ${active.length == 1 ? 'farm' : 'farms'}',
+            child: _FarmRanking(farms: active),
+          );
+
+          final costSection = ReportSection(
+            title: 'Cost composition',
+            subtitle: 'Where money goes per farm',
+            child: _CostComposition(farms: active),
+          );
+
+          final yieldSection = ReportSection(
+            title: 'Yield by farm',
+            subtitle: 'Net yield, dominant unit per farm',
+            child: _YieldList(farms: active),
+          );
+
+          final hasYield = active.any((f) => f.harvestCount > 0);
+
+          if (isDesktop) {
+            return Column(
+              children: [
+                const SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _ProfitHero(totals: totals),
+                ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: KpiGrid(items: _kpiItems(totals), columns: 4),
+                ),
+                const SizedBox(height: 16),
+
+                // Ranked — full width
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: rankedSection,
+                ),
+                const SizedBox(height: 16),
+
+                // Cost composition | Yield (side-by-side when yield exists)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: hasYield
+                      ? IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(child: costSection),
+                              const SizedBox(width: 16),
+                              Expanded(child: yieldSection),
+                            ],
+                          ),
+                        )
+                      : costSection,
+                ),
+                const SizedBox(height: 32),
+              ],
+            );
+          }
+
+          // Mobile — original stacking order preserved
+          return Column(
+            children: [
+              const SizedBox(height: 20),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _ProfitHero(totals: totals),
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: KpiGrid(items: _kpiItems(totals)),
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: rankedSection,
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: costSection,
+              ),
+              if (hasYield) ...[
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: yieldSection,
+                ),
+              ],
+              const SizedBox(height: 32),
+            ],
+          );
+        },
+      ),
+    ];
+  }
+
   List<KpiData> _kpiItems(_Totals t) {
     final profit = t.profit;
     final positive = profit >= 0;
-    final profitableFarms =
-        t.ranked.where((f) => f.profit > 0).length;
+    final profitableFarms = t.ranked.where((f) => f.profit > 0).length;
 
     return [
       KpiData(
@@ -624,9 +794,8 @@ class _YieldList extends StatelessWidget {
       );
     }
 
-    final maxNet = withYield
-        .map((f) => f.netYield)
-        .reduce((a, b) => a > b ? a : b);
+    final maxNet =
+        withYield.map((f) => f.netYield).reduce((a, b) => a > b ? a : b);
 
     return Column(
       children: [

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../dashboard/widgets/dashboard_palette.dart';
 import '../../expenses/expense_format.dart';
 import '../../harvests/data/harvest_model.dart';
 import '../../harvests/data/harvest_style.dart';
@@ -17,14 +18,24 @@ class HarvestReportScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final range = ref.watch(harvestReportRangeProvider);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 1000;
+        if (isDesktop) return _buildDesktop(context, ref);
+        return _buildMobile(context, ref);
+      },
+    );
+  }
+
+  // ===========================================================================
+  // MOBILE (unchanged)
+  // ===========================================================================
+  Widget _buildMobile(BuildContext context, WidgetRef ref) {
     final kpis = ref.watch(harvestKpisProvider);
+    final range = ref.watch(harvestReportRangeProvider);
     final delta = ref.watch(harvestDeltaProvider);
     final byCrop = ref.watch(harvestByCropProvider);
     final byGrade = ref.watch(harvestByGradeProvider);
-    final cropUnits = ref.watch(harvestCropUnitsProvider);
-    final trend = ref.watch(harvestTrendProvider);
-    final top = ref.watch(topHarvestsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -41,100 +52,352 @@ class HarvestReportScreen extends ConsumerWidget {
       ),
       body: ListView(
         padding: EdgeInsets.zero,
+        children: _buildContent(context, ref, isDesktop: false),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // DESKTOP
+  // ===========================================================================
+  Widget _buildDesktop(BuildContext context, WidgetRef ref) {
+    final kpis = ref.watch(harvestKpisProvider);
+    final range = ref.watch(harvestReportRangeProvider);
+    final delta = ref.watch(harvestDeltaProvider);
+    final byCrop = ref.watch(harvestByCropProvider);
+    final byGrade = ref.watch(harvestByGradeProvider);
+
+    return Scaffold(
+      backgroundColor: DPalette.canvas,
+      body: Column(
         children: [
-          const SizedBox(height: 8),
-          ReportPeriodBar(
-            current: range,
-            onChanged: (r) =>
-                ref.read(harvestReportRangeProvider.notifier).state = r,
-            onCustomTap: () => _pickCustom(context, ref, range),
+          _buildDesktopHeader(
+            context,
+            kpis,
+            range,
+            delta,
+            byCrop,
+            byGrade,
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: ReportRangeInfo(
-              range: range,
-              trailing: kpis.isEmpty
-                  ? null
-                  : formatQuantity(kpis.netYield, kpis.dominantUnit),
-            ),
-          ),
-          if (kpis.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: ReportEmptyState(
-                icon: Icons.agriculture,
-                title: 'No harvests in this period',
-                message:
-                    'Try a wider range, or record some harvests to see trends.',
-              ),
-            )
-          else ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-              child: KpiGrid(items: _kpiItems(kpis, delta)),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _secondaryRow(kpis),
-            ),
-            if (kpis.hasWaste) ...[
-              const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _WasteBanner(kpis: kpis),
-              ),
-            ],
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _comparisonSection(range, delta, kpis.dominantUnit),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ReportSection(
-                title: 'Yield by crop',
-                subtitle: _cropSubtitle(byCrop.length),
-                child: _cropBreakdown(byCrop, cropUnits),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ReportSection(
-                title: 'Grade distribution',
-                subtitle: _gradeSubtitle(byGrade),
-                child: _GradeDistribution(rows: byGrade),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ReportSection(
-                title: 'Net yield vs waste',
-                subtitle: 'Monthly · ${kpis.dominantUnit}',
-                child: DualTrendBars(
-                  points: trend,
-                  positiveColor: _netGreen,
-                  negativeColor: _wasteRed,
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1400),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: _buildContent(context, ref, isDesktop: true),
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ReportSection(
-                title: 'Biggest harvests',
-                subtitle: 'Top ${top.length} of ${kpis.count}',
-                child: _TopHarvests(harvests: top),
-              ),
-            ),
-            const SizedBox(height: 32),
-          ],
+          ),
         ],
       ),
     );
+  }
+
+  Widget _buildDesktopHeader(
+    BuildContext context,
+    HarvestKpis kpis,
+    ReportRange range,
+    PeriodDelta delta,
+    List<BreakdownRow> byCrop,
+    List<BreakdownRow> byGrade,
+  ) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(32, 18, 32, 18),
+      decoration: const BoxDecoration(
+        color: DPalette.surface,
+        border: Border(bottom: BorderSide(color: DPalette.hairline)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF00695C), HarvestStyle.primary],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: HarvestStyle.primary.withValues(alpha: 0.25),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Icon(Icons.agriculture,
+                color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Harvest Report',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: DPalette.ink,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Yield, waste and grade quality over time.',
+                  style: TextStyle(fontSize: 13, color: DPalette.inkMuted),
+                ),
+              ],
+            ),
+          ),
+          if (!kpis.isEmpty)
+            OutlinedButton.icon(
+              onPressed: () =>
+                  _copySummary(context, range, kpis, delta, byCrop, byGrade),
+              icon: const Icon(Icons.copy_all_outlined, size: 18),
+              label: const Text('Copy summary'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: DPalette.ink,
+                side: const BorderSide(color: DPalette.hairline),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // SHARED CONTENT
+  // ===========================================================================
+  List<Widget> _buildContent(
+    BuildContext context,
+    WidgetRef ref, {
+    bool isDesktop = false,
+  }) {
+    final range = ref.watch(harvestReportRangeProvider);
+    final kpis = ref.watch(harvestKpisProvider);
+    final delta = ref.watch(harvestDeltaProvider);
+    final byCrop = ref.watch(harvestByCropProvider);
+    final byGrade = ref.watch(harvestByGradeProvider);
+    final cropUnits = ref.watch(harvestCropUnitsProvider);
+    final trend = ref.watch(harvestTrendProvider);
+    final top = ref.watch(topHarvestsProvider);
+
+    if (kpis.isEmpty) {
+      return [
+        const SizedBox(height: 8),
+        ReportPeriodBar(
+          current: range,
+          onChanged: (r) =>
+              ref.read(harvestReportRangeProvider.notifier).state = r,
+          onCustomTap: () => _pickCustom(context, ref, range),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: ReportRangeInfo(range: range),
+        ),
+        const Padding(
+          padding: EdgeInsets.all(16),
+          child: ReportEmptyState(
+            icon: Icons.agriculture,
+            title: 'No harvests in this period',
+            message:
+                'Try a wider range, or record some harvests to see trends.',
+          ),
+        ),
+      ];
+    }
+
+    // Pre-built sections
+    final wasteBanner = kpis.hasWaste ? _WasteBanner(kpis: kpis) : null;
+    final comparison = _comparisonSection(range, delta, kpis.dominantUnit);
+
+    final cropSection = ReportSection(
+      title: 'Yield by crop',
+      subtitle: _cropSubtitle(byCrop.length),
+      child: _cropBreakdown(byCrop, cropUnits),
+    );
+
+    final gradeSection = ReportSection(
+      title: 'Grade distribution',
+      subtitle: _gradeSubtitle(byGrade),
+      child: _GradeDistribution(rows: byGrade),
+    );
+
+    final trendSection = ReportSection(
+      title: 'Net yield vs waste',
+      subtitle: 'Monthly · ${kpis.dominantUnit}',
+      child: DualTrendBars(
+        points: trend,
+        positiveColor: _netGreen,
+        negativeColor: _wasteRed,
+      ),
+    );
+
+    final topSection = ReportSection(
+      title: 'Biggest harvests',
+      subtitle: 'Top ${top.length} of ${kpis.count}',
+      child: _TopHarvests(harvests: top),
+    );
+
+    if (isDesktop) {
+      return [
+        const SizedBox(height: 8),
+        ReportPeriodBar(
+          current: range,
+          onChanged: (r) =>
+              ref.read(harvestReportRangeProvider.notifier).state = r,
+          onCustomTap: () => _pickCustom(context, ref, range),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: ReportRangeInfo(
+            range: range,
+            trailing: formatQuantity(kpis.netYield, kpis.dominantUnit),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+          child: KpiGrid(items: _kpiItems(kpis, delta), columns: 4),
+        ),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: _secondaryRow(kpis),
+        ),
+
+        // Waste banner | Comparison strip — side by side on desktop
+        if (wasteBanner != null) ...[
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: wasteBanner),
+                  const SizedBox(width: 16),
+                  Expanded(child: comparison),
+                ],
+              ),
+            ),
+          ),
+        ] else ...[
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: comparison,
+          ),
+        ],
+
+        // Yield by crop | Grade distribution
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: cropSection),
+                const SizedBox(width: 16),
+                Expanded(child: gradeSection),
+              ],
+            ),
+          ),
+        ),
+
+        // Net yield vs waste | Biggest harvests
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: trendSection),
+                const SizedBox(width: 16),
+                Expanded(child: topSection),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 32),
+      ];
+    }
+
+    // Mobile — original stacking order preserved
+    return [
+      const SizedBox(height: 8),
+      ReportPeriodBar(
+        current: range,
+        onChanged: (r) =>
+            ref.read(harvestReportRangeProvider.notifier).state = r,
+        onCustomTap: () => _pickCustom(context, ref, range),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: ReportRangeInfo(
+          range: range,
+          trailing: formatQuantity(kpis.netYield, kpis.dominantUnit),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+        child: KpiGrid(items: _kpiItems(kpis, delta)),
+      ),
+      const SizedBox(height: 12),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: _secondaryRow(kpis),
+      ),
+      if (wasteBanner != null) ...[
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: wasteBanner,
+        ),
+      ],
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: comparison,
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: cropSection,
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: gradeSection,
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: trendSection,
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: topSection,
+      ),
+      const SizedBox(height: 32),
+    ];
   }
 
   // -------------------------------------------------------------------------
@@ -151,7 +414,7 @@ class HarvestReportScreen extends ConsumerWidget {
             ? null
             : '${delta.isUp ? '+' : ''}${pct.toStringAsFixed(1)}% vs prev',
         deltaIsUp: pct == null ? null : delta.isUp,
-        deltaIsPositive: pct == null ? null : delta.isUp, // more yield = good
+        deltaIsPositive: pct == null ? null : delta.isUp,
         color: _netGreen,
       ),
       KpiData(
@@ -271,10 +534,9 @@ class HarvestReportScreen extends ConsumerWidget {
 
     return PeriodDeltaStrip(
       currentLabel: formatQuantity(d.current, unit),
-      previousLabel:
-          'Previous: ${formatQuantity(d.previous, unit)}',
+      previousLabel: 'Previous: ${formatQuantity(d.previous, unit)}',
       delta: d,
-      positiveWhenUp: true, // more yield = good
+      positiveWhenUp: true,
     );
   }
 
@@ -285,12 +547,6 @@ class HarvestReportScreen extends ConsumerWidget {
     List<BreakdownRow> rows,
     Map<String, String> cropUnits,
   ) {
-    // Palette by rank position.
-    final colorMap = <String, Color>{};
-    for (var i = 0; i < rows.length; i++) {
-      colorMap[rows[i].key] = HarvestStyle.primary;
-    }
-    // Use a subtle variation so multiple crops aren't identical.
     return Column(
       children: [
         for (var i = 0; i < rows.length; i++) ...[
@@ -384,7 +640,7 @@ class HarvestReportScreen extends ConsumerWidget {
   }
 
   // -------------------------------------------------------------------------
-  // Copy
+  // Subtitles
   // -------------------------------------------------------------------------
   String _cropSubtitle(int count) =>
       '$count ${count == 1 ? 'crop' : 'crops'}';

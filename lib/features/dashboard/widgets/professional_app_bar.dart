@@ -42,8 +42,8 @@ class ProfessionalAppBar extends ConsumerWidget implements PreferredSizeWidget {
         ),
         child: CustomPaint(
           painter: _GridPainter(
-            color: Color(0x0F0B5D3B),
-            spacing: 16,
+            color: Color(0x1A0B5D3B),   // ← 10% opacity (was 6%, now visible)
+            spacing: 14,                  // ← tighter cells
           ),
         ),
       ),
@@ -236,7 +236,7 @@ class _GridPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = color
-      ..strokeWidth = 0.6
+      ..strokeWidth = 0.7
       ..style = PaintingStyle.stroke;
 
     for (double x = 0; x <= size.width; x += spacing) {

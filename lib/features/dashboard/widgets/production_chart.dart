@@ -8,12 +8,14 @@ class ProductionChart extends StatelessWidget {
   final List<MonthlyProduction> data;
   final ChartRange range;
   final ValueChanged<ChartRange> onRangeChanged;
+  final bool lineMode;
 
   const ProductionChart({
     super.key,
     required this.data,
     required this.range,
     required this.onRangeChanged,
+    this.lineMode = false,
   });
 
   @override
@@ -23,7 +25,7 @@ class ProductionChart extends StatelessWidget {
     final totalSales = data.fold<double>(0, (s, e) => s + e.salesKg);
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
       decoration: BoxDecoration(
         color: DPalette.surface,
         borderRadius: BorderRadius.circular(20),
@@ -40,23 +42,66 @@ class ProductionChart extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Production Overview',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: DPalette.ink,
-                        letterSpacing: -0.3,
-                      ),
+                    Row(
+                      children: [
+                        Container(
+                          width: 28,
+                          height: 28,
+                          alignment: Alignment.center,
+                          decoration: DPalette.iconChip(
+                            DPalette.brand,
+                            DPalette.iconGreenTint,
+                            radius: 8,
+                          ),
+                          child: const Icon(
+                            Icons.show_chart_rounded,
+                            size: 15,
+                            color: DPalette.brand,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        const Text(
+                          'Production Overview',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: DPalette.ink,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${_fmt(totalProd)} kg produced  ·  ${_fmt(totalSales)} kg sold',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: DPalette.inkMuted,
-                        letterSpacing: 0.1,
+                    const SizedBox(height: 6),
+                    RichText(
+                      text: TextSpan(
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: '${_fmt(totalProd)} kg',
+                            style: const TextStyle(
+                              color: DPalette.brand,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const TextSpan(
+                            text: ' produced · ',
+                            style: TextStyle(color: DPalette.inkMuted),
+                          ),
+                          TextSpan(
+                            text: '${_fmt(totalSales)} kg',
+                            style: const TextStyle(
+                              color: DPalette.iconTeal,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const TextSpan(
+                            text: ' sold',
+                            style: TextStyle(color: DPalette.inkMuted),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -70,9 +115,12 @@ class ProductionChart extends StatelessWidget {
           if (!hasData)
             _emptyState()
           else ...[
-            _legend(),
-            const SizedBox(height: 16),
-            SizedBox(height: 178, child: _chart()),
+            if (!lineMode) _legend(),
+            if (!lineMode) const SizedBox(height: 16),
+            SizedBox(
+              height: lineMode ? 210 : 178,
+              child: lineMode ? _lineChart() : _barChart(),
+            ),
           ],
         ],
       ),
@@ -100,7 +148,7 @@ class ProductionChart extends StatelessWidget {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOut,
-              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: selected ? DPalette.brand : Colors.transparent,
                 borderRadius: BorderRadius.circular(7),
@@ -210,7 +258,8 @@ class ProductionChart extends StatelessWidget {
     );
   }
 
-  Widget _chart() {
+  // ── MOBILE BAR CHART (unchanged look) ─────────────────────────────────────
+  Widget _barChart() {
     final maxVal = data
         .expand((e) => [e.productionKg, e.salesKg])
         .fold<double>(0, (m, v) => v > m ? v : m);
@@ -218,7 +267,6 @@ class ProductionChart extends StatelessWidget {
 
     return Stack(
       children: [
-        // Subtle horizontal grid lines behind the bars.
         Positioned.fill(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -279,7 +327,7 @@ class ProductionChart extends StatelessWidget {
     final deep = Color.lerp(color, DPalette.brandDeep, 0.28)!;
     return Container(
       width: 9,
-      height: (ratio * 138).clamp(3, 138),
+      height: (ratio * 138).clamp(8, 138),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.bottomCenter,
@@ -298,9 +346,160 @@ class ProductionChart extends StatelessWidget {
     );
   }
 
+  // ── DESKTOP LINE CHART (reference look) ──────────────────────────────────
+  Widget _lineChart() {
+    final values = data.map((e) => e.productionKg).toList();
+    final maxVal = values.isEmpty
+        ? 0.0
+        : values.reduce((a, b) => a > b ? a : b);
+    final safeMax = maxVal == 0 ? 1.0 : maxVal;
+
+    return Column(
+      children: [
+        // Soft horizontal grid lines sit behind the painter
+        Expanded(
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: List.generate(
+                      4,
+                      (i) => Container(
+                        height: 1,
+                        color: DPalette.hairline.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _LineChartPainter(
+                    values: values,
+                    maxValue: safeMax,
+                    lineColor: DPalette.brand,
+                    fillColor: DPalette.brand,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: data
+              .map(
+                (d) => Text(
+                  d.monthLabel,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: DPalette.inkMuted,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+      ],
+    );
+  }
+
   String _fmt(double v) {
     if (v.abs() >= 1000000) return '${(v / 1000000).toStringAsFixed(1)}M';
     if (v.abs() >= 1000) return '${(v / 1000).toStringAsFixed(1)}K';
     return v.toStringAsFixed(0);
   }
+}
+
+// =============================================================================
+// Smooth-line painter with area fill + dots — desktop only.
+// =============================================================================
+class _LineChartPainter extends CustomPainter {
+  final List<double> values;
+  final double maxValue;
+  final Color lineColor;
+  final Color fillColor;
+
+  _LineChartPainter({
+    required this.values,
+    required this.maxValue,
+    required this.lineColor,
+    required this.fillColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.isEmpty) return;
+
+    const padX = 6.0;
+    final chartW = size.width - padX * 2;
+    final chartH = size.height;
+
+    final stepX = values.length > 1 ? chartW / (values.length - 1) : 0;
+
+    final points = <Offset>[];
+    for (var i = 0; i < values.length; i++) {
+      final x = padX + i * stepX;
+      final ratio = (values[i] / maxValue).clamp(0.0, 1.0);
+      // Leave 12px of headroom at the top
+      final y = chartH - (ratio * (chartH - 12)) - 4;
+      points.add(Offset(x, y));
+    }
+
+    // ── Area fill ──
+    final areaPath = Path()..moveTo(points.first.dx, chartH);
+    for (final p in points) {
+      areaPath.lineTo(p.dx, p.dy);
+    }
+    areaPath.lineTo(points.last.dx, chartH);
+    areaPath.close();
+
+    final fillPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          fillColor.withValues(alpha: 0.22),
+          fillColor.withValues(alpha: 0.02),
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, chartH));
+    canvas.drawPath(areaPath, fillPaint);
+
+    // ── Smooth curve ──
+    final linePath = Path()..moveTo(points.first.dx, points.first.dy);
+    for (var i = 0; i < points.length - 1; i++) {
+      final p0 = points[i];
+      final p1 = points[i + 1];
+      final midX = (p0.dx + p1.dx) / 2;
+      linePath.cubicTo(midX, p0.dy, midX, p1.dy, p1.dx, p1.dy);
+    }
+
+    final linePaint = Paint()
+      ..color = lineColor
+      ..strokeWidth = 2.6
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(linePath, linePaint);
+
+    // ── Dots ──
+    final dotFill = Paint()..color = Colors.white;
+    final dotStroke = Paint()
+      ..color = lineColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2;
+    for (final p in points) {
+      canvas.drawCircle(p, 4.2, dotFill);
+      canvas.drawCircle(p, 4.2, dotStroke);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LineChartPainter old) =>
+      old.values != values || old.maxValue != maxValue;
 }

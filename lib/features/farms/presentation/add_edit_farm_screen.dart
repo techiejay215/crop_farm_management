@@ -1,5 +1,10 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+
+// ⚠️ IMPORTANT: Adjust this import path to where your StorageService is located
+import '../../../core/services/storage_service.dart'; 
 import '../../../core/theme/app_theme.dart';
 import '../../admin/providers/customer_provider.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -29,11 +34,16 @@ class _AddEditFarmScreenState extends ConsumerState<AddEditFarmScreen> {
   bool _loading = false;
   bool _loadedExisting = false;
 
-  /// Snapshots of fields the form doesn't edit but must preserve on update —
-  /// otherwise update() would zero them.
+  /// Snapshots of fields the form doesn't edit but must preserve on update
   int _existingCropCount = 0;
   DateTime? _existingCreatedAt;
   String? _existingLogoUrl;
+
+  /// Logo picking state
+  final ImagePicker _picker = ImagePicker();
+  XFile? _pickedLogoFile;
+  Uint8List? _pickedLogoBytes;
+  bool _isUploadingLogo = false;
 
   bool get _isEditing => widget.farmId != null;
 
@@ -89,6 +99,26 @@ class _AddEditFarmScreenState extends ConsumerState<AddEditFarmScreen> {
   String _fmtNum(double v) =>
       v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
 
+  // ── Pick Image Logic ─────────────────────────────────────────────────────
+  Future<void> _pickLogo() async {
+    try {
+      final picked = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80, // Compress slightly to speed up Cloudinary upload
+        maxWidth: 800,
+      );
+      if (picked != null) {
+        final bytes = await picked.readAsBytes();
+        setState(() {
+          _pickedLogoFile = picked;
+          _pickedLogoBytes = bytes;
+        });
+      }
+    } catch (e) {
+      _snack('Failed to pick image: $e', error: true);
+    }
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -106,6 +136,25 @@ class _AddEditFarmScreenState extends ConsumerState<AddEditFarmScreen> {
     setState(() => _loading = true);
 
     try {
+      String? finalLogoUrl = _existingLogoUrl;
+
+      // 1. Upload to Cloudinary if a new image was picked
+      if (_pickedLogoFile != null) {
+        setState(() => _isUploadingLogo = true);
+        
+        // Generate a temporary ID if creating a new farm to use as folder name
+        final uploadFolderId = widget.farmId ?? 'temp_${DateTime.now().millisecondsSinceEpoch}';
+        
+        final storageService = StorageService();
+        finalLogoUrl = await storageService.uploadFarmLogo(
+          farmId: uploadFolderId,
+          file: _pickedLogoFile!,
+        );
+        
+        setState(() => _isUploadingLogo = false);
+      }
+
+      // 2. Build the Farm object
       final farm = Farm(
         id: widget.farmId ?? '',
         ownerId: ownerId,
@@ -113,34 +162,35 @@ class _AddEditFarmScreenState extends ConsumerState<AddEditFarmScreen> {
         type: _type,
         location: _locationCtrl.text.trim(),
         acreage: double.parse(_acreageCtrl.text.trim()),
-        landlord:
-            _type == 'rented' ? _landlordCtrl.text.trim() : null,
+        landlord: _type == 'rented' ? _landlordCtrl.text.trim() : null,
         rentalCost: _type == 'rented'
             ? double.tryParse(_rentalCostCtrl.text.trim())
             : null,
         rentalPeriod: _type == 'rented' ? _rentalPeriod : null,
-        // --- preserved fields (the real bug fix) ---
-        logoUrl: _existingLogoUrl,
+        logoUrl: finalLogoUrl, // 👈 Save the Cloudinary URL here
         cropCount: _existingCropCount,
         createdAt: _existingCreatedAt,
       );
 
+      // 3. Save to Firestore
       final repo = ref.read(farmRepositoryProvider);
       if (!_isEditing) {
         await repo.createFarm(farm);
       } else {
-        // Explicit nulls so switching from rented → main actually clears
-        // the rental fields in Firestore.
         final data = farm.toFirestore()
           ..['landlord'] = farm.landlord
           ..['rentalCost'] = farm.rentalCost
           ..['rentalPeriod'] = farm.rentalPeriod;
         await repo.updateFarm(widget.farmId!, data);
       }
+      
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
-        setState(() => _loading = false);
+        setState(() {
+          _loading = false;
+          _isUploadingLogo = false;
+        });
         _snack('Could not save: $e', error: true);
       }
     }
@@ -196,7 +246,6 @@ class _AddEditFarmScreenState extends ConsumerState<AddEditFarmScreen> {
     final isAdmin = ref.watch(isAdminProvider);
     final customersAsync = ref.watch(customersStreamProvider);
 
-    // Late-arriving stream safety net.
     ref.listen(farmsStreamProvider, (_, __) {
       if (_isEditing && !_loadedExisting) _prefill();
     });
@@ -218,12 +267,17 @@ class _AddEditFarmScreenState extends ConsumerState<AddEditFarmScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
           children: [
+            // ── Logo Picker ──
+            _buildLogoPicker(),
+            const SizedBox(height: 20),
+
             _TypeHero(
               type: _type,
               name: _nameCtrl.text.trim(),
               acreage: double.tryParse(_acreageCtrl.text) ?? 0,
             ),
             const SizedBox(height: 24),
+            
             if (isAdmin) ...[
               _label('Customer'),
               const SizedBox(height: 8),
@@ -254,10 +308,12 @@ class _AddEditFarmScreenState extends ConsumerState<AddEditFarmScreen> {
               ),
               const SizedBox(height: 20),
             ],
+            
             _label('Farm type'),
             const SizedBox(height: 8),
             _typeRow(),
             const SizedBox(height: 20),
+            
             TextFormField(
               controller: _nameCtrl,
               textCapitalization: TextCapitalization.words,
@@ -272,6 +328,7 @@ class _AddEditFarmScreenState extends ConsumerState<AddEditFarmScreen> {
                   (v ?? '').trim().isEmpty ? 'Required' : null,
             ),
             const SizedBox(height: 16),
+            
             TextFormField(
               controller: _locationCtrl,
               textCapitalization: TextCapitalization.words,
@@ -285,6 +342,7 @@ class _AddEditFarmScreenState extends ConsumerState<AddEditFarmScreen> {
                   (v ?? '').trim().isEmpty ? 'Required' : null,
             ),
             const SizedBox(height: 16),
+            
             TextFormField(
               controller: _acreageCtrl,
               keyboardType:
@@ -303,6 +361,7 @@ class _AddEditFarmScreenState extends ConsumerState<AddEditFarmScreen> {
                 return null;
               },
             ),
+            
             if (_type == 'rented') ...[
               const SizedBox(height: 24),
               _label('Rental details'),
@@ -359,7 +418,9 @@ class _AddEditFarmScreenState extends ConsumerState<AddEditFarmScreen> {
                 ],
               ),
             ],
+            
             const SizedBox(height: 32),
+            
             SizedBox(
               height: 52,
               child: ElevatedButton(
@@ -372,13 +433,22 @@ class _AddEditFarmScreenState extends ConsumerState<AddEditFarmScreen> {
                   ),
                 ),
                 child: _loading
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.4,
-                          color: Colors.white,
-                        ),
+                    ? Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.4,
+                              color: Colors.white,
+                            ),
+                          ),
+                          if (_isUploadingLogo) ...[
+                            const SizedBox(width: 12),
+                            const Text('Uploading logo...', style: TextStyle(color: Colors.white)),
+                          ]
+                        ],
                       )
                     : Text(
                         _isEditing ? 'Save Changes' : 'Create Farm',
@@ -391,6 +461,84 @@ class _AddEditFarmScreenState extends ConsumerState<AddEditFarmScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ── Logo Picker Widget ───────────────────────────────────────────────────
+  Widget _buildLogoPicker() {
+    return Center(
+      child: GestureDetector(
+        onTap: _loading ? null : _pickLogo,
+        child: Stack(
+          children: [
+            Container(
+              width: 110,
+              height: 110,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: AppTheme.primaryGreen.withValues(alpha: 0.3),
+                  width: 2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ClipOval(
+                child: _pickedLogoBytes != null
+                    // 1. Show newly picked image
+                    ? Image.memory(
+                        _pickedLogoBytes!,
+                        fit: BoxFit.cover,
+                      )
+                    // 2. Show existing image from DB
+                    : (_existingLogoUrl != null && _existingLogoUrl!.isNotEmpty)
+                        ? Image.network(
+                            _existingLogoUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => _logoPlaceholder(),
+                          )
+                        // 3. Show placeholder
+                        : _logoPlaceholder(),
+              ),
+            ),
+            Positioned(
+              bottom: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryGreen,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                child: const Icon(
+                  Icons.camera_alt_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _logoPlaceholder() {
+    return Container(
+      color: AppTheme.primaryGreen.withValues(alpha: 0.05),
+      alignment: Alignment.center,
+      child: Icon(
+        Icons.add_photo_alternate_outlined,
+        color: AppTheme.primaryGreen.withValues(alpha: 0.5),
+        size: 36,
       ),
     );
   }

@@ -1,8 +1,124 @@
+// lib/features/dashboard/widgets/metric_card.dart
 import 'package:flutter/material.dart';
 import 'dashboard_palette.dart';
 
 // =============================================================================
-// PRIMARY METRIC CARD — compact horizontal layout
+// NEW: KPI CARD (Used exclusively on Desktop)
+// Compact, watermark-decorated card matching the reference design.
+// =============================================================================
+class KpiCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final String trendText;
+  final IconData icon;
+  final IconData? watermark;
+  final Color iconColor;
+  final Color iconBg;
+  final Color trendColor;
+
+  const KpiCard({
+    super.key,
+    required this.title,
+    required this.value,
+    required this.trendText,
+    required this.icon,
+    this.watermark,
+    required this.iconColor,
+    required this.iconBg,
+    this.trendColor = DPalette.iconGreen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 132,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: DPalette.hairline),
+        boxShadow: DPalette.cardShadow,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          // Soft watermark illustration (bottom-right)
+          Positioned(
+            right: -10,
+            bottom: -10,
+            child: Icon(
+              watermark ?? icon,
+              size: 92,
+              color: iconColor.withValues(alpha: 0.07),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: iconBg,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(icon, color: iconColor, size: 18),
+                    ),
+                    const SizedBox(width: 10),
+                    Flexible(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: iconColor,
+                          letterSpacing: -0.1,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    color: DPalette.ink,
+                    letterSpacing: -0.9,
+                    height: 1,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  trendText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: trendColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// ORIGINAL: PRIMARY METRIC CARD (Used on Mobile) — UNCHANGED
 // =============================================================================
 class PrimaryMetricCard extends StatelessWidget {
   final String label;
@@ -31,10 +147,7 @@ class PrimaryMetricCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Color.lerp(DPalette.surface, accentTint, 0.45)!,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: accent.withValues(alpha: 0.20),
-          width: 1,
-        ),
+        border: Border.all(color: accent.withValues(alpha: 0.20), width: 1),
         boxShadow: DPalette.cardShadow,
       ),
       child: Row(
@@ -114,7 +227,7 @@ class PrimaryMetricCard extends StatelessWidget {
 }
 
 // =============================================================================
-// FINANCIAL METRIC CARD — tighter + more colour
+// ORIGINAL: FINANCIAL METRIC CARD (Used on Mobile) — UNCHANGED
 // =============================================================================
 class FinancialMetricCard extends StatelessWidget {
   final String label;
@@ -141,10 +254,7 @@ class FinancialMetricCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: background ?? DPalette.surface,
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(
-          color: border ?? DPalette.hairline,
-          width: 1,
-        ),
+        border: Border.all(color: border ?? DPalette.hairline, width: 1),
         boxShadow: DPalette.cardShadow,
       ),
       child: Column(
@@ -159,15 +269,11 @@ class FinancialMetricCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: accentColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: accentColor.withValues(alpha: 0.22),
-                  ),
+                  border:
+                      Border.all(color: accentColor.withValues(alpha: 0.22)),
                 ),
-                child: Icon(
-                  icon ?? _defaultIcon(label),
-                  size: 13,
-                  color: accentColor,
-                ),
+                child: Icon(icon ?? Icons.circle_outlined,
+                    size: 13, color: accentColor),
               ),
               const Spacer(),
               Container(
@@ -210,18 +316,5 @@ class FinancialMetricCard extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  static IconData _defaultIcon(String label) {
-    switch (label.toLowerCase()) {
-      case 'revenue':
-        return Icons.trending_up_rounded;
-      case 'expenses':
-        return Icons.trending_down_rounded;
-      case 'net profit':
-        return Icons.savings_outlined;
-      default:
-        return Icons.circle_outlined;
-    }
   }
 }

@@ -26,14 +26,11 @@ class AuthRepository {
       throw Exception('account-paused');
     }
 
-    // Update lastLoginAt silently
     try {
       await _firestore.collection('users').doc(uid).update({
         'lastLoginAt': FieldValue.serverTimestamp(),
       });
-    } catch (_) {
-      // Non-critical, ignore failure
-    }
+    } catch (_) {}
 
     return credential.user;
   }
@@ -59,5 +56,12 @@ class AuthRepository {
       ...data,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // PASSWORD RESET
+  // ---------------------------------------------------------------------------
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _auth.sendPasswordResetEmail(email: email.trim());
   }
 }

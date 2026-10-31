@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../dashboard/widgets/dashboard_palette.dart';
 import '../../crops/data/crop_activity_model.dart';
 import '../../crops/data/crop_style.dart';
 import '../../expenses/data/expense_model.dart';
@@ -19,10 +20,26 @@ const Color _expenseOrange = Color(0xFFEF6C00);
 
 class CropReportDetailScreen extends ConsumerWidget {
   final String cropName;
-  const CropReportDetailScreen({super.key, required this.cropName});
+  const CropReportDetailScreen({
+    super.key,
+    required this.cropName,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 1000;
+        if (isDesktop) return _buildDesktop(context, ref);
+        return _buildMobile(context, ref);
+      },
+    );
+  }
+
+  // ===========================================================================
+  // MOBILE (unchanged)
+  // ===========================================================================
+  Widget _buildMobile(BuildContext context, WidgetRef ref) {
     final range = ref.watch(cropReportRangeProvider);
     final detailAsync = ref.watch(cropReportDetailProvider(cropName));
 
@@ -48,150 +65,387 @@ class CropReportDetailScreen extends ConsumerWidget {
             ref.invalidate(cropReportDetailProvider(cropName)),
         child: ListView(
           padding: EdgeInsets.zero,
-          children: [
-            const SizedBox(height: 8),
-            ReportPeriodBar(
-              current: range,
-              onChanged: (r) =>
-                  ref.read(cropReportRangeProvider.notifier).state = r,
-              onCustomTap: () => _pickCustom(context, ref, range),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: ReportRangeInfo(range: range),
-            ),
-            detailAsync.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.all(48),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (e, _) => Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text('Error: $e'),
-              ),
-              data: (d) {
-                if (d.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: ReportEmptyState(
-                      icon: Icons.grass_outlined,
-                      title: 'No data for this crop',
-                      message:
-                          'Record crops, activities, harvests or sales for '
-                          'this crop to see its report.',
-                    ),
-                  );
-                }
-                return Column(
-                  children: [
-                    const SizedBox(height: 16),
-
-                    // ---- 1. Overview hero ----
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: _Hero(detail: d),
-                    ),
-
-                    // ---- 2. Financial KPIs ----
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: KpiGrid(items: _kpiItems(d)),
-                    ),
-
-                    // ---- 3. Instances ----
-                    if (d.instances.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: ReportSection(
-                          title: 'Where it\'s grown',
-                          subtitle:
-                              '${d.instances.length} ${d.instances.length == 1 ? 'plot' : 'plots'} · '
-                              '${d.totalPlants} plants · '
-                              '${d.totalAcreage.toStringAsFixed(d.totalAcreage == d.totalAcreage.roundToDouble() ? 0 : 1)} ac',
-                          child: _Instances(instances: d.instances),
-                        ),
-                      ),
-                    ],
-
-                    // ---- 4. Activities grouped by type ----
-                    if (d.activities.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: ReportSection(
-                          title: 'Activities',
-                          subtitle:
-                              '${d.activities.length} recorded · grouped by type',
-                          child: _ActivitiesGrouped(detail: d),
-                        ),
-                      ),
-                    ],
-
-                    // ---- 5. Expenses grouped by category ----
-                    if (d.expenses.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: ReportSection(
-                          title: 'Expenses',
-                          subtitle:
-                              '${d.expenses.length} entries · total ${formatKsh(d.totalExpenses)}',
-                          child: _ExpensesGrouped(detail: d),
-                        ),
-                      ),
-                    ],
-
-                    // ---- 6. Income ----
-                    if (d.income.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: ReportSection(
-                          title: 'Income',
-                          subtitle:
-                              '${d.income.length} sales · total ${formatKsh(d.totalIncome)}'
-                              '${d.totalPending > 0 ? ' (+${formatShortKsh(d.totalPending)} pending)' : ''}',
-                          child: _IncomeList(rows: d.income),
-                        ),
-                      ),
-                    ],
-
-                    // ---- 7. Harvest / production ----
-                    if (d.harvests.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: ReportSection(
-                          title: 'Production',
-                          subtitle:
-                              '${d.harvests.length} harvests · net ${formatQuantity(d.netYield, d.dominantUnit)}',
-                          child: _HarvestList(detail: d),
-                        ),
-                      ),
-                    ],
-
-                    // ---- 8. Profitability ----
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: ReportSection(
-                        title: 'Profitability',
-                        subtitle: 'Income minus expenses',
-                        child: _Profitability(detail: d),
-                      ),
-                    ),
-
-                    const SizedBox(height: 32),
-                  ],
-                );
-              },
-            ),
-          ],
+          children: _buildContent(context, ref, isDesktop: false),
         ),
       ),
     );
+  }
+
+  // ===========================================================================
+  // DESKTOP
+  // ===========================================================================
+  Widget _buildDesktop(BuildContext context, WidgetRef ref) {
+    final detailAsync = ref.watch(cropReportDetailProvider(cropName));
+
+    return Scaffold(
+      backgroundColor: DPalette.canvas,
+      body: Column(
+        children: [
+          _buildDesktopHeader(context, ref, detailAsync),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async =>
+                  ref.invalidate(cropReportDetailProvider(cropName)),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1400),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children:
+                          _buildContent(context, ref, isDesktop: true),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopHeader(
+    BuildContext context,
+    WidgetRef ref,
+    AsyncValue<CropReportDetail> detailAsync,
+  ) {
+    final range = ref.watch(cropReportRangeProvider);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(32, 18, 32, 18),
+      decoration: const BoxDecoration(
+        color: DPalette.surface,
+        border: Border(bottom: BorderSide(color: DPalette.hairline)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: CropStyle.heroGradient.colors,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: CropStyle.primary.withValues(alpha: 0.25),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Icon(Icons.grass_outlined,
+                color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  cropName.isEmpty ? 'Crop Report' : cropName,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: DPalette.ink,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'Profitability, activities and income for this crop.',
+                  style: TextStyle(fontSize: 13, color: DPalette.inkMuted),
+                ),
+              ],
+            ),
+          ),
+          detailAsync.maybeWhen(
+            data: (d) => d.isEmpty
+                ? const SizedBox.shrink()
+                : OutlinedButton.icon(
+                    onPressed: () => _copySummary(context, range, d),
+                    icon: const Icon(Icons.copy_all_outlined, size: 18),
+                    label: const Text('Copy summary'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: DPalette.ink,
+                      side: const BorderSide(color: DPalette.hairline),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+            orElse: () => const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // SHARED CONTENT
+  // ===========================================================================
+  List<Widget> _buildContent(
+    BuildContext context,
+    WidgetRef ref, {
+    bool isDesktop = false,
+  }) {
+    final range = ref.watch(cropReportRangeProvider);
+    final detailAsync = ref.watch(cropReportDetailProvider(cropName));
+
+    return [
+      const SizedBox(height: 8),
+      ReportPeriodBar(
+        current: range,
+        onChanged: (r) =>
+            ref.read(cropReportRangeProvider.notifier).state = r,
+        onCustomTap: () => _pickCustom(context, ref, range),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: ReportRangeInfo(range: range),
+      ),
+      detailAsync.when(
+        loading: () => const Padding(
+          padding: EdgeInsets.all(48),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+        error: (e, _) => Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text('Error: $e'),
+        ),
+        data: (d) {
+          if (d.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: ReportEmptyState(
+                icon: Icons.grass_outlined,
+                title: 'No data for this crop',
+                message:
+                    'Record crops, activities, harvests or sales for '
+                    'this crop to see its report.',
+              ),
+            );
+          }
+
+          final hero = _Hero(detail: d);
+          final kpis = KpiGrid(
+            items: _kpiItems(d),
+            columns: isDesktop ? 4 : 2,
+          );
+
+          final instancesSection = d.instances.isNotEmpty
+              ? ReportSection(
+                  title: 'Where it\'s grown',
+                  subtitle:
+                      '${d.instances.length} ${d.instances.length == 1 ? 'plot' : 'plots'} · '
+                      '${d.totalPlants} plants · '
+                      '${d.totalAcreage.toStringAsFixed(d.totalAcreage == d.totalAcreage.roundToDouble() ? 0 : 1)} ac',
+                  child: _Instances(instances: d.instances),
+                )
+              : null;
+
+          final profitabilitySection = ReportSection(
+            title: 'Profitability',
+            subtitle: 'Income minus expenses',
+            child: _Profitability(detail: d),
+          );
+
+          final activitiesSection = d.activities.isNotEmpty
+              ? ReportSection(
+                  title: 'Activities',
+                  subtitle:
+                      '${d.activities.length} recorded · grouped by type',
+                  child: _ActivitiesGrouped(detail: d),
+                )
+              : null;
+
+          final expensesSection = d.expenses.isNotEmpty
+              ? ReportSection(
+                  title: 'Expenses',
+                  subtitle:
+                      '${d.expenses.length} entries · total ${formatKsh(d.totalExpenses)}',
+                  child: _ExpensesGrouped(detail: d),
+                )
+              : null;
+
+          final incomeSection = d.income.isNotEmpty
+              ? ReportSection(
+                  title: 'Income',
+                  subtitle:
+                      '${d.income.length} sales · total ${formatKsh(d.totalIncome)}'
+                      '${d.totalPending > 0 ? ' (+${formatShortKsh(d.totalPending)} pending)' : ''}',
+                  child: _IncomeList(rows: d.income),
+                )
+              : null;
+
+          final harvestSection = d.harvests.isNotEmpty
+              ? ReportSection(
+                  title: 'Production',
+                  subtitle:
+                      '${d.harvests.length} harvests · net ${formatQuantity(d.netYield, d.dominantUnit)}',
+                  child: _HarvestList(detail: d),
+                )
+              : null;
+
+          if (isDesktop) {
+            return Column(
+              children: [
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: hero,
+                ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: kpis,
+                ),
+
+                // Where it's grown | Profitability
+                if (instancesSection != null) ...[
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: instancesSection),
+                          const SizedBox(width: 16),
+                          Expanded(child: profitabilitySection),
+                        ],
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: profitabilitySection,
+                  ),
+                ],
+
+                // Activities — full width (usually the longest)
+                if (activitiesSection != null) ...[
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: activitiesSection,
+                  ),
+                ],
+
+                // Expenses | Income
+                if (expensesSection != null && incomeSection != null) ...[
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: expensesSection),
+                          const SizedBox(width: 16),
+                          Expanded(child: incomeSection),
+                        ],
+                      ),
+                    ),
+                  ),
+                ] else if (expensesSection != null) ...[
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: expensesSection,
+                  ),
+                ] else if (incomeSection != null) ...[
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: incomeSection,
+                  ),
+                ],
+
+                // Production — full width
+                if (harvestSection != null) ...[
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: harvestSection,
+                  ),
+                ],
+
+                const SizedBox(height: 32),
+              ],
+            );
+          }
+
+          // Mobile — original stacking order preserved
+          return Column(
+            children: [
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: hero,
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: kpis,
+              ),
+              if (instancesSection != null) ...[
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: instancesSection,
+                ),
+              ],
+              if (activitiesSection != null) ...[
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: activitiesSection,
+                ),
+              ],
+              if (expensesSection != null) ...[
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: expensesSection,
+                ),
+              ],
+              if (incomeSection != null) ...[
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: incomeSection,
+                ),
+              ],
+              if (harvestSection != null) ...[
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: harvestSection,
+                ),
+              ],
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: profitabilitySection,
+              ),
+              const SizedBox(height: 32),
+            ],
+          );
+        },
+      ),
+    ];
   }
 
   // -------------------------------------------------------------------------
@@ -541,7 +795,6 @@ class _ActivitiesGrouped extends StatelessWidget {
   Widget build(BuildContext context) {
     final grouped = detail.activitiesByType;
 
-    // Order by count desc.
     final sorted = grouped.entries.toList()
       ..sort((a, b) => b.value.length.compareTo(a.value.length));
 
@@ -584,7 +837,6 @@ class _GroupSectionState extends State<_GroupSection> {
     final icon = ActivityTypes.icon(widget.type);
     final label = ActivityTypes.label(widget.type);
 
-    // Show up to 3 by default; expand to all.
     final visible =
         _expanded ? widget.rows : widget.rows.take(3).toList();
     final hasMore = widget.rows.length > 3;
@@ -598,7 +850,6 @@ class _GroupSectionState extends State<_GroupSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ---- Group header ----
           Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
@@ -659,7 +910,6 @@ class _GroupSectionState extends State<_GroupSection> {
             ),
           ),
           Divider(height: 1, color: color.withValues(alpha: 0.12)),
-          // ---- Rows ----
           for (var i = 0; i < visible.length; i++) ...[
             Padding(
               padding: const EdgeInsets.symmetric(
@@ -674,7 +924,6 @@ class _GroupSectionState extends State<_GroupSection> {
                 endIndent: 12,
               ),
           ],
-          // ---- Show more / less ----
           if (hasMore)
             InkWell(
               onTap: () => setState(() => _expanded = !_expanded),
@@ -757,7 +1006,6 @@ class _ActivityLine extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        // Right column: quantity + cost / income
         Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
@@ -848,7 +1096,6 @@ class _ExpensesGrouped extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Category bars
         for (var i = 0; i < sorted.length; i++) ...[
           if (i > 0) const SizedBox(height: 12),
           _CategoryBar(
@@ -860,7 +1107,6 @@ class _ExpensesGrouped extends StatelessWidget {
         const SizedBox(height: 16),
         Divider(height: 1, color: Colors.black.withValues(alpha: 0.06)),
         const SizedBox(height: 12),
-        // Total row
         Row(
           children: [
             const Text(

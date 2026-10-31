@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../dashboard/widgets/dashboard_palette.dart';
 import '../../expenses/data/expense_model.dart';
 import '../../expenses/expense_format.dart';
 import '../../expenses/widgets/expense_category_style.dart';
@@ -14,12 +15,23 @@ class ExpenseReportScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 1000;
+        if (isDesktop) return _buildDesktop(context, ref);
+        return _buildMobile(context, ref);
+      },
+    );
+  }
+
+  // ===========================================================================
+  // MOBILE (unchanged)
+  // ===========================================================================
+  Widget _buildMobile(BuildContext context, WidgetRef ref) {
     final range = ref.watch(expenseReportRangeProvider);
     final kpis = ref.watch(expenseKpisProvider);
     final delta = ref.watch(expenseDeltaProvider);
     final breakdown = ref.watch(expenseCategoryBreakdownProvider);
-    final trend = ref.watch(expenseMonthlyTrendProvider);
-    final top = ref.watch(topExpensesProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -36,83 +48,297 @@ class ExpenseReportScreen extends ConsumerWidget {
       ),
       body: ListView(
         padding: EdgeInsets.zero,
+        children: _buildContent(context, ref, isDesktop: false),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // DESKTOP
+  // ===========================================================================
+  Widget _buildDesktop(BuildContext context, WidgetRef ref) {
+    final range = ref.watch(expenseReportRangeProvider);
+    final kpis = ref.watch(expenseKpisProvider);
+    final delta = ref.watch(expenseDeltaProvider);
+    final breakdown = ref.watch(expenseCategoryBreakdownProvider);
+
+    return Scaffold(
+      backgroundColor: DPalette.canvas,
+      body: Column(
         children: [
-          const SizedBox(height: 8),
-          ReportPeriodBar(
-            current: range,
-            onChanged: (r) =>
-                ref.read(expenseReportRangeProvider.notifier).state = r,
-            onCustomTap: () => _pickCustom(context, ref, range),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: ReportRangeInfo(
-              range: range,
-              trailing: kpis.isEmpty ? null : formatKsh(kpis.total),
-            ),
-          ),
-          if (kpis.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: ReportEmptyState(
-                icon: Icons.receipt_long_outlined,
-                title: 'No expenses in this period',
-                message:
-                    'Try a wider range, or record some expenses first.',
-              ),
-            )
-          else ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-              child: KpiGrid(items: _kpiItems(kpis, delta)),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _secondaryRow(kpis),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _comparisonSection(range, delta),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ReportSection(
-                title: 'Spending by category',
-                subtitle:
-                    '${breakdown.length} ${breakdown.length == 1 ? 'category' : 'categories'}',
-                child: BreakdownTable(
-                  rows: breakdown,
-                  colorFor: (k) => ExpenseCategories.of(k).color,
-                  iconFor: (k) => ExpenseCategories.of(k).icon,
+          _buildDesktopHeader(context, kpis, range, delta, breakdown),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1400),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children:
+                        _buildContent(context, ref, isDesktop: true),
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ReportSection(
-                title: 'Monthly trend',
-                subtitle: _trendSubtitle(trend),
-                child: TrendBars(points: trend),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ReportSection(
-                title: 'Biggest expenses',
-                subtitle: 'Top ${top.length} of ${kpis.count}',
-                child: RankedExpenseList(expenses: top),
-              ),
-            ),
-            const SizedBox(height: 32),
-          ],
+          ),
         ],
       ),
     );
+  }
+
+  Widget _buildDesktopHeader(
+    BuildContext context,
+    ExpenseKpis kpis,
+    ReportRange range,
+    PeriodDelta delta,
+    List<BreakdownRow> breakdown,
+  ) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(32, 18, 32, 18),
+      decoration: const BoxDecoration(
+        color: DPalette.surface,
+        border: Border(bottom: BorderSide(color: DPalette.hairline)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFE65100), AppTheme.expenseOrange],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.expenseOrange.withValues(alpha: 0.25),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Icon(Icons.receipt_long_outlined,
+                color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Expense Report',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: DPalette.ink,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Spending breakdown, trends and top costs.',
+                  style: TextStyle(fontSize: 13, color: DPalette.inkMuted),
+                ),
+              ],
+            ),
+          ),
+          if (!kpis.isEmpty)
+            OutlinedButton.icon(
+              onPressed: () =>
+                  _copySummary(context, range, kpis, delta, breakdown),
+              icon: const Icon(Icons.copy_all_outlined, size: 18),
+              label: const Text('Copy summary'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: DPalette.ink,
+                side: const BorderSide(color: DPalette.hairline),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // SHARED CONTENT
+  // ===========================================================================
+  List<Widget> _buildContent(
+    BuildContext context,
+    WidgetRef ref, {
+    bool isDesktop = false,
+  }) {
+    final range = ref.watch(expenseReportRangeProvider);
+    final kpis = ref.watch(expenseKpisProvider);
+    final delta = ref.watch(expenseDeltaProvider);
+    final breakdown = ref.watch(expenseCategoryBreakdownProvider);
+    final trend = ref.watch(expenseMonthlyTrendProvider);
+    final top = ref.watch(topExpensesProvider);
+
+    if (kpis.isEmpty) {
+      return [
+        const SizedBox(height: 8),
+        ReportPeriodBar(
+          current: range,
+          onChanged: (r) =>
+              ref.read(expenseReportRangeProvider.notifier).state = r,
+          onCustomTap: () => _pickCustom(context, ref, range),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: ReportRangeInfo(range: range),
+        ),
+        const Padding(
+          padding: EdgeInsets.all(16),
+          child: ReportEmptyState(
+            icon: Icons.receipt_long_outlined,
+            title: 'No expenses in this period',
+            message: 'Try a wider range, or record some expenses first.',
+          ),
+        ),
+      ];
+    }
+
+    final breakdownSection = ReportSection(
+      title: 'Spending by category',
+      subtitle:
+          '${breakdown.length} ${breakdown.length == 1 ? 'category' : 'categories'}',
+      child: BreakdownTable(
+        rows: breakdown,
+        colorFor: (k) => ExpenseCategories.of(k).color,
+        iconFor: (k) => ExpenseCategories.of(k).icon,
+      ),
+    );
+
+    final trendSection = ReportSection(
+      title: 'Monthly trend',
+      subtitle: _trendSubtitle(trend),
+      child: TrendBars(points: trend),
+    );
+
+    final topSection = ReportSection(
+      title: 'Biggest expenses',
+      subtitle: 'Top ${top.length} of ${kpis.count}',
+      child: RankedExpenseList(expenses: top),
+    );
+
+    // Secondary rows: mobile uses 2 expanded tiles; desktop widens
+    // to 4 columns alongside comparison for a denser strip.
+    final secondary = <Widget>[];
+    if (isDesktop) {
+      secondary.add(
+        Row(
+          children: [
+            Expanded(child: _stat('Median', formatKsh(kpis.median))),
+            const SizedBox(width: 12),
+            Expanded(child: _stat('Active days', '${kpis.activeDays}')),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _stat(
+                'Largest',
+                formatKsh(kpis.highest),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _stat(
+                'Average',
+                formatKsh(kpis.average),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      secondary.add(_secondaryRow(kpis));
+    }
+
+    return [
+      const SizedBox(height: 8),
+      ReportPeriodBar(
+        current: range,
+        onChanged: (r) =>
+            ref.read(expenseReportRangeProvider.notifier).state = r,
+        onCustomTap: () => _pickCustom(context, ref, range),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: ReportRangeInfo(
+          range: range,
+          trailing: formatKsh(kpis.total),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+        child: KpiGrid(
+          items: _kpiItems(kpis, delta),
+          columns: isDesktop ? 4 : 2,
+        ),
+      ),
+      const SizedBox(height: 12),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Column(
+          children: [
+            for (var i = 0; i < secondary.length; i++) ...[
+              if (i > 0) const SizedBox(height: 8),
+              secondary[i],
+            ],
+          ],
+        ),
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: _comparisonSection(range, delta),
+      ),
+      const SizedBox(height: 16),
+      if (isDesktop) ...[
+        // Side-by-side: category breakdown | monthly trend
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: breakdownSection),
+                const SizedBox(width: 16),
+                Expanded(child: trendSection),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: topSection,
+        ),
+      ] else ...[
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: breakdownSection,
+        ),
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: trendSection,
+        ),
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: topSection,
+        ),
+      ],
+      const SizedBox(height: 32),
+    ];
   }
 
   // -------------------------------------------------------------------------
@@ -130,7 +356,7 @@ class ExpenseReportScreen extends ConsumerWidget {
             ? null
             : '${d.isUp ? '+' : ''}${pct.toStringAsFixed(1)}% vs prev',
         deltaIsUp: pct == null ? null : d.isUp,
-        deltaIsPositive: pct == null ? null : !d.isUp, // up = bad for expenses
+        deltaIsPositive: pct == null ? null : !d.isUp,
         color: AppTheme.expenseOrange,
       ),
       KpiData(
@@ -220,7 +446,7 @@ class ExpenseReportScreen extends ConsumerWidget {
       currentLabel: formatKsh(d.current),
       previousLabel: 'Previous period: ${formatKsh(d.previous)}',
       delta: d,
-      positiveWhenUp: false, // up = bad for expenses
+      positiveWhenUp: false,
     );
   }
 
@@ -231,9 +457,6 @@ class ExpenseReportScreen extends ConsumerWidget {
     return 'Avg ${formatKsh(avg)} / month';
   }
 
-  // -------------------------------------------------------------------------
-  // Custom range
-  // -------------------------------------------------------------------------
   Future<void> _pickCustom(
     BuildContext context,
     WidgetRef ref,
@@ -256,9 +479,6 @@ class ExpenseReportScreen extends ConsumerWidget {
     );
   }
 
-  // -------------------------------------------------------------------------
-  // Share
-  // -------------------------------------------------------------------------
   void _copySummary(
     BuildContext context,
     ReportRange range,

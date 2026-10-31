@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../dashboard/widgets/dashboard_palette.dart';
 import '../../crops/providers/crop_provider.dart' show selectedFarmIdProvider;
 import '../data/greenhouse_model.dart';
 import '../data/greenhouse_style.dart';
@@ -166,9 +167,19 @@ class _AddEditGreenhouseScreenState
       if (_isEditing && !_loadedExisting) _prefill();
     });
 
-    final density = _density;
-    final densityColor = GreenhouseStyle.densityColor(density);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 1000;
+        if (isDesktop) return _buildDesktop(context);
+        return _buildMobile(context);
+      },
+    );
+  }
 
+  // ===========================================================================
+  // MOBILE (unchanged)
+  // ===========================================================================
+  Widget _buildMobile(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(_isEditing ? 'Edit Greenhouse' : 'New Greenhouse'),
@@ -185,166 +196,268 @@ class _AddEditGreenhouseScreenState
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-          children: [
-            _HeroCard(
-              name: _nameCtrl.text.trim(),
-              size: double.tryParse(_sizeCtrl.text) ?? 0,
-              crop: _cropCtrl.text.trim(),
-              plants: int.tryParse(_plantsCtrl.text) ?? 0,
-            ),
-            const SizedBox(height: 24),
-            TextFormField(
-              controller: _nameCtrl,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Greenhouse name',
-                hintText: 'e.g. Greenhouse 1, Tunnel A',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.warehouse_outlined),
-              ),
-              onChanged: (_) => setState(() {}),
-              validator: (v) =>
-                  (v ?? '').trim().isEmpty ? 'Required' : null,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _sizeCtrl,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Size',
-                hintText: 'e.g. 480',
-                suffixText: 'm²',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.square_foot_outlined),
-              ),
-              onChanged: (_) => setState(() {}),
-              validator: (v) {
-                final n = double.tryParse((v ?? '').trim());
-                if (n == null) return 'Enter a number';
-                if (n <= 0) return '> 0';
-                return null;
-              },
-            ),
-            const SizedBox(height: 24),
-            _label('Current crop'),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _cropCtrl,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                hintText: 'Leave blank if the greenhouse is empty',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.grass_outlined),
-              ),
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _plantsCtrl,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Number of plants',
-                hintText: 'e.g. 600',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.eco_outlined),
-              ),
-              onChanged: (_) => setState(() {}),
-              validator: (v) {
-                if ((v ?? '').trim().isEmpty) return null;
-                final n = int.tryParse(v!.trim());
-                if (n == null) return 'Enter a number';
-                if (n < 0) return 'Cannot be negative';
-                return null;
-              },
-            ),
-            if (density != null) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(
-                  color: densityColor.withValues(alpha: 0.07),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: densityColor.withValues(alpha: 0.25),
+          children: _buildFormFields(),
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // DESKTOP
+  // ===========================================================================
+  Widget _buildDesktop(BuildContext context) {
+    return Scaffold(
+      backgroundColor: DPalette.canvas,
+      body: Column(
+        children: [
+          _buildDesktopHeader(context),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 880),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: _buildFormFields(),
+                    ),
                   ),
                 ),
-                child: Row(
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopHeader(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(32, 18, 32, 18),
+      decoration: const BoxDecoration(
+        color: DPalette.surface,
+        border: Border(bottom: BorderSide(color: DPalette.hairline)),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back, color: DPalette.ink),
+            tooltip: 'Back',
+            onPressed: () => Navigator.pop(context),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _isEditing ? 'Edit Greenhouse' : 'New Greenhouse',
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: DPalette.ink,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _isEditing
+                      ? 'Update greenhouse details and production.'
+                      : 'Add a new greenhouse to your farm.',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: DPalette.inkMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_isEditing)
+            TextButton.icon(
+              onPressed: _loading ? null : _confirmDelete,
+              icon: const Icon(Icons.delete_outline, size: 18),
+              label: const Text('Delete'),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFC62828),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // SHARED FORM FIELDS
+  // ===========================================================================
+  List<Widget> _buildFormFields() {
+    final density = _density;
+    final densityColor = GreenhouseStyle.densityColor(density);
+
+    return [
+      _HeroCard(
+        name: _nameCtrl.text.trim(),
+        size: double.tryParse(_sizeCtrl.text) ?? 0,
+        crop: _cropCtrl.text.trim(),
+        plants: int.tryParse(_plantsCtrl.text) ?? 0,
+      ),
+      const SizedBox(height: 24),
+      TextFormField(
+        controller: _nameCtrl,
+        textCapitalization: TextCapitalization.words,
+        decoration: const InputDecoration(
+          labelText: 'Greenhouse name',
+          hintText: 'e.g. Greenhouse 1, Tunnel A',
+          border: OutlineInputBorder(),
+          prefixIcon: Icon(Icons.warehouse_outlined),
+        ),
+        onChanged: (_) => setState(() {}),
+        validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null,
+      ),
+      const SizedBox(height: 16),
+      TextFormField(
+        controller: _sizeCtrl,
+        keyboardType:
+            const TextInputType.numberWithOptions(decimal: true),
+        decoration: const InputDecoration(
+          labelText: 'Size',
+          hintText: 'e.g. 480',
+          suffixText: 'm²',
+          border: OutlineInputBorder(),
+          prefixIcon: Icon(Icons.square_foot_outlined),
+        ),
+        onChanged: (_) => setState(() {}),
+        validator: (v) {
+          final n = double.tryParse((v ?? '').trim());
+          if (n == null) return 'Enter a number';
+          if (n <= 0) return '> 0';
+          return null;
+        },
+      ),
+      const SizedBox(height: 24),
+      _label('Current crop'),
+      const SizedBox(height: 8),
+      TextFormField(
+        controller: _cropCtrl,
+        textCapitalization: TextCapitalization.words,
+        decoration: const InputDecoration(
+          hintText: 'Leave blank if the greenhouse is empty',
+          border: OutlineInputBorder(),
+          prefixIcon: Icon(Icons.grass_outlined),
+        ),
+        onChanged: (_) => setState(() {}),
+      ),
+      const SizedBox(height: 16),
+      TextFormField(
+        controller: _plantsCtrl,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(
+          labelText: 'Number of plants',
+          hintText: 'e.g. 600',
+          border: OutlineInputBorder(),
+          prefixIcon: Icon(Icons.eco_outlined),
+        ),
+        onChanged: (_) => setState(() {}),
+        validator: (v) {
+          if ((v ?? '').trim().isEmpty) return null;
+          final n = int.tryParse(v!.trim());
+          if (n == null) return 'Enter a number';
+          if (n < 0) return 'Cannot be negative';
+          return null;
+        },
+      ),
+      if (density != null) ...[
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.symmetric(
+              horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: densityColor.withValues(alpha: 0.07),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: densityColor.withValues(alpha: 0.25),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.density_medium_outlined,
+                  size: 16, color: densityColor),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.density_medium_outlined,
-                        size: 16, color: densityColor),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Plant density',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: densityColor.withValues(alpha: 0.85),
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            GreenhouseStyle.densityLabel(density),
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: densityColor,
-                            ),
-                          ),
-                        ],
+                    Text(
+                      'Plant density',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: densityColor.withValues(alpha: 0.85),
                       ),
                     ),
+                    const SizedBox(height: 2),
                     Text(
-                      '${int.tryParse(_plantsCtrl.text) ?? 0} plants ÷ '
-                      '${double.tryParse(_sizeCtrl.text)?.toStringAsFixed(0) ?? 0} m²',
+                      GreenhouseStyle.densityLabel(density),
                       style: TextStyle(
-                        fontSize: 10.5,
-                        color: Colors.black.withValues(alpha: 0.5),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: densityColor,
                       ),
                     ),
                   ],
                 ),
               ),
+              Text(
+                '${int.tryParse(_plantsCtrl.text) ?? 0} plants ÷ '
+                '${double.tryParse(_sizeCtrl.text)?.toStringAsFixed(0) ?? 0} m²',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  color: Colors.black.withValues(alpha: 0.5),
+                ),
+              ),
             ],
-            const SizedBox(height: 32),
-            SizedBox(
-              height: 52,
-              child: ElevatedButton(
-                onPressed: _loading ? null : _save,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryGreen,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ],
+      const SizedBox(height: 32),
+      SizedBox(
+        height: 52,
+        child: ElevatedButton(
+          onPressed: _loading ? null : _save,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.primaryGreen,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          child: _loading
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    color: Colors.white,
+                  ),
+                )
+              : Text(
+                  _isEditing ? 'Save Changes' : 'Create Greenhouse',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-                child: _loading
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.4,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(
-                        _isEditing ? 'Save Changes' : 'Create Greenhouse',
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-              ),
-            ),
-          ],
         ),
       ),
-    );
+    ];
   }
 
   Widget _label(String text) => Text(
@@ -358,7 +471,7 @@ class _AddEditGreenhouseScreenState
 }
 
 // ===========================================================================
-// Hero preview card
+// Hero preview card (unchanged)
 // ===========================================================================
 class _HeroCard extends StatelessWidget {
   const _HeroCard({

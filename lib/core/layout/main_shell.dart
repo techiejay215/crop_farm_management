@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/providers/auth_provider.dart';
+import '../../features/crops/providers/crop_provider.dart' show selectedFarmIdProvider;
+import '../../features/farms/providers/farm_provider.dart';
 import '../../features/dashboard/widgets/dashboard_palette.dart' show DPalette;
 import 'responsive_layout.dart';
 
@@ -19,70 +21,24 @@ class _MainShellState extends ConsumerState<MainShell> {
   List<Map<String, dynamic>> _buildNavItems({required bool isAdmin}) {
     if (isAdmin) {
       return [
-        {
-          'icon': Icons.dashboard_outlined,
-          'label': 'Dashboard',
-          'route': '/dashboard',
-        },
-        {
-          'icon': Icons.manage_accounts_outlined,
-          'label': 'Users',
-          'route': '/admin/users',
-        },
-        {
-          'icon': Icons.person_add_alt_1_outlined,
-          'label': 'Register',
-          'route': '/admin/register-customer',
-        },
+        {'icon': Icons.space_dashboard_rounded, 'label': 'Dashboard', 'route': '/dashboard'},
+        {'icon': Icons.manage_accounts_rounded, 'label': 'Users', 'route': '/admin/users'},
+        {'icon': Icons.person_add_alt_1_rounded, 'label': 'Register', 'route': '/admin/register-customer'},
+        {'icon': Icons.settings_rounded, 'label': 'Settings', 'route': '/settings'},
       ];
     }
 
     return [
-      {
-        'icon': Icons.dashboard_outlined,
-        'label': 'Dashboard',
-        'route': '/dashboard',
-      },
-      {
-        'icon': Icons.agriculture_outlined,
-        'label': 'Farms',
-        'route': '/farms',
-      },
-      {
-        'icon': Icons.grass_outlined,
-        'label': 'Crops',
-        'route': '/crops',
-      },
-      {
-        'icon': Icons.warehouse_outlined,
-        'label': 'Greenhouses',
-        'route': '/greenhouses',
-      },
-      {
-        'icon': Icons.agriculture,
-        'label': 'Harvests',
-        'route': '/harvests',
-      },
-      {
-        'icon': Icons.shopping_cart_outlined,
-        'label': 'Sales',
-        'route': '/sales',
-      },
-      {
-        'icon': Icons.account_balance_wallet_outlined,
-        'label': 'Expenses',
-        'route': '/expenses',
-      },
-      {
-        'icon': Icons.groups_outlined,
-        'label': 'Labour',
-        'route': '/labour',
-      },
-      {
-        'icon': Icons.insert_chart_outlined,
-        'label': 'Reports',
-        'route': '/reports',
-      },
+      {'icon': Icons.space_dashboard_rounded, 'label': 'Dashboard', 'route': '/dashboard'},
+      {'icon': Icons.agriculture_rounded, 'label': 'Farms', 'route': '/farms'},
+      {'icon': Icons.grass_rounded, 'label': 'Crops', 'route': '/crops'},
+      {'icon': Icons.warehouse_rounded, 'label': 'Greenhouses', 'route': '/greenhouses'},
+      {'icon': Icons.eco_rounded, 'label': 'Harvests', 'route': '/harvests'},
+      {'icon': Icons.shopping_cart_rounded, 'label': 'Sales', 'route': '/sales'},
+      {'icon': Icons.account_balance_wallet_rounded, 'label': 'Expenses', 'route': '/expenses'},
+      {'icon': Icons.groups_rounded, 'label': 'Labour', 'route': '/labour'},
+      {'icon': Icons.insert_chart_rounded, 'label': 'Reports', 'route': '/reports'},
+      {'icon': Icons.settings_rounded, 'label': 'Settings', 'route': '/settings'},
     ];
   }
 
@@ -106,7 +62,6 @@ class _MainShellState extends ConsumerState<MainShell> {
   void _goTo(int index) {
     final items = _buildNavItems(isAdmin: ref.read(isAdminProvider));
     setState(() => _selectedIndex = index);
-    // Bottom-nav tabs replace the stack — intentional (tab-switch semantics).
     context.go(items[index]['route'] as String);
   }
 
@@ -123,8 +78,29 @@ class _MainShellState extends ConsumerState<MainShell> {
     final name = (userData?['name'] ?? 'User') as String;
     final initials = _initialsOf(name);
 
+    // ── Dynamic Farm Data for Sidebar ──────────────────────────────────────
+    final selectedFarmId = ref.watch(selectedFarmIdProvider);
+    final farmsAsync = ref.watch(farmsStreamProvider);
+    
+    String activeFarmName = 'DANKA';
+    String? activeFarmLogo;
+
+    if (selectedFarmId != null && farmsAsync.hasValue) {
+      for (final f in farmsAsync.value!) {
+        try {
+          if (f.id == selectedFarmId) {
+            activeFarmName = f.farmName as String;
+            // Safely extract logo URL (handles common model field names)
+            final dynamic farmData = f;
+            activeFarmLogo = farmData.logoUrl ?? farmData.imageUrl ?? farmData.photoUrl;
+            break;
+          }
+        } catch (_) {}
+      }
+    }
+
     return ResponsiveLayout(
-      // ==================== MOBILE ====================
+      // ==================== MOBILE (UNCHANGED) ====================
       mobileScaffold: Scaffold(
         body: widget.child,
         bottomNavigationBar: _ProfessionalBottomNav(
@@ -134,124 +110,20 @@ class _MainShellState extends ConsumerState<MainShell> {
         ),
       ),
 
-      // ==================== DESKTOP ====================
+      // ==================== DESKTOP (REDESIGNED) ====================
       desktopScaffold: Scaffold(
+        backgroundColor: DPalette.canvas,
         body: Row(
           children: [
-            NavigationRail(
-              extended: true,
-              minExtendedWidth: 240,
-              backgroundColor: DPalette.brand,
+            _DesktopSidebar(
+              items: items,
               selectedIndex: _selectedIndex,
-              onDestinationSelected: _goTo,
-              selectedIconTheme:
-                  const IconThemeData(color: Colors.white, size: 22),
-              unselectedIconTheme:
-                  const IconThemeData(color: Colors.white70, size: 22),
-              selectedLabelTextStyle: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
-              unselectedLabelTextStyle: const TextStyle(
-                color: Colors.white70,
-                fontSize: 13,
-              ),
-              leading: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 34,
-                      height: 34,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                      child: const Icon(Icons.eco,
-                          color: Colors.white, size: 20),
-                    ),
-                    const SizedBox(width: 10),
-                    const Text(
-                      'DANKA',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.4,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              trailing: Expanded(
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 20),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 12),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.10),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 14,
-                                backgroundColor:
-                                    Colors.white.withValues(alpha: 0.22),
-                                child: Text(
-                                  initials,
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        IconButton(
-                          tooltip: 'Logout',
-                          icon: const Icon(Icons.logout_rounded,
-                              color: Colors.white70, size: 20),
-                          onPressed: _logout,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              destinations: items
-                  .map((item) => NavigationRailDestination(
-                        icon: Icon(item['icon'] as IconData),
-                        label: Text(item['label'] as String),
-                      ))
-                  .toList(),
+              onTap: _goTo,
+              name: name,
+              initials: initials,
+              onLogout: _logout,
+              farmName: activeFarmName,
+              farmLogo: activeFarmLogo,
             ),
             const VerticalDivider(
                 thickness: 1, width: 1, color: DPalette.hairline),
@@ -292,7 +164,262 @@ class _MainShellState extends ConsumerState<MainShell> {
 }
 
 // ===========================================================================
-// MORE SHEET
+// DESKTOP SIDEBAR (Dynamic Farm Branding)
+// ===========================================================================
+class _DesktopSidebar extends StatelessWidget {
+  final List<Map<String, dynamic>> items;
+  final int selectedIndex;
+  final ValueChanged<int> onTap;
+  final String name;
+  final String initials;
+  final Future<void> Function() onLogout;
+  final String farmName;
+  final String? farmLogo;
+
+  const _DesktopSidebar({
+    required this.items,
+    required this.selectedIndex,
+    required this.onTap,
+    required this.name,
+    required this.initials,
+    required this.onLogout,
+    required this.farmName,
+    this.farmLogo,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 250,
+      color: DPalette.sidebarBg,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ── Dynamic Farm Brand Mark ─────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(22, 26, 22, 26),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: DPalette.brand.withValues(alpha: 0.15),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: DPalette.brand.withValues(alpha: 0.10),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(11),
+                    child: (farmLogo != null && farmLogo!.isNotEmpty)
+                        ? Image.network(
+                            farmLogo!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => _fallbackLogo(),
+                          )
+                        : _fallbackLogo(),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        farmName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: DPalette.brandDeep,
+                          letterSpacing: 0.5,
+                          height: 1,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Farm Management',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: DPalette.inkMuted,
+                          letterSpacing: 0.2,
+                          height: 1,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Divider ────────────────────────────────────────
+          Container(
+            height: 1,
+            margin: const EdgeInsets.symmetric(horizontal: 20),
+            color: DPalette.hairline,
+          ),
+          const SizedBox(height: 14),
+
+          // ── Navigation list ────────────────────────────────
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemCount: items.length,
+              itemBuilder: (context, i) {
+                final item = items[i];
+                final selected = i == selectedIndex;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                    child: InkWell(
+                      onTap: () => onTap(i),
+                      borderRadius: BorderRadius.circular(10),
+                      splashColor: DPalette.brand.withValues(alpha: 0.10),
+                      highlightColor: Colors.transparent,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeOut,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 11),
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? DPalette.sidebarActive
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              item['icon'] as IconData,
+                              size: 19,
+                              color: selected
+                                  ? DPalette.brand
+                                  : DPalette.inkSoft,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                item['label'] as String,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: selected
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  color: selected
+                                      ? DPalette.brandDeep
+                                      : DPalette.inkSoft,
+                                  letterSpacing: -0.1,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          // ── User card / logout ─────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 18),
+            child: Column(
+              children: [
+                Container(
+                  height: 1,
+                  color: DPalette.hairline,
+                  margin: const EdgeInsets.only(bottom: 12),
+                ),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: DPalette.hairline),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 16,
+                        backgroundColor: DPalette.sidebarActive,
+                        child: Text(
+                          initials,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: DPalette.brand,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: DPalette.ink,
+                          ),
+                        ),
+                      ),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: onLogout,
+                        child: const Padding(
+                          padding: EdgeInsets.all(6),
+                          child: Icon(
+                            Icons.logout_rounded,
+                            size: 16,
+                            color: DPalette.inkMuted,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _fallbackLogo() {
+    return Container(
+      color: DPalette.sageSoft,
+      alignment: Alignment.center,
+      child: const Icon(
+        Icons.eco_rounded,
+        color: DPalette.brand,
+        size: 22,
+      ),
+    );
+  }
+}
+
+// ===========================================================================
+// MORE SHEET (Unchanged for Mobile)
 // ===========================================================================
 class _MoreSheet extends StatelessWidget {
   final bool isAdmin;
@@ -577,19 +704,12 @@ class _MoreTile extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: () {
-          // Capture the router BEFORE popping the sheet — the sheet's
-          // BuildContext will be disposed the moment Navigator.pop runs.
           final router = GoRouter.of(context);
           final currentLocation =
               router.routerDelegate.currentConfiguration.uri.path;
 
           Navigator.pop(context);
-
-          // Tapping the tile you're already on shouldn't stack a duplicate.
           if (currentLocation == route) return;
-
-          // push (not go!) so the back button returns to wherever the user
-          // was before opening the More sheet.
           router.push(route);
         },
         child: Container(
@@ -645,7 +765,6 @@ class _MoreTile extends StatelessWidget {
   }
 }
 
-// ---- Dedicated logout tile (warm-gold alert family) ----
 class _LogoutTile extends StatelessWidget {
   final VoidCallback onTap;
   const _LogoutTile({required this.onTap});
@@ -700,7 +819,7 @@ class _LogoutTile extends StatelessWidget {
 }
 
 // ===========================================================================
-// BOTTOM NAV — each tab always shows its own colour
+// BOTTOM NAV — UNCHANGED
 // ===========================================================================
 class _ProfessionalBottomNav extends StatelessWidget {
   final int selectedIndex;
@@ -795,8 +914,6 @@ class _ProfessionalBottomNav extends StatelessWidget {
                         height: 32,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          // Active = solid accent. Inactive = soft tint.
-                          // Never grey — every tab keeps its identity.
                           color: selected ? item.accent : item.tint,
                           borderRadius: BorderRadius.circular(11),
                           boxShadow: selected
@@ -824,8 +941,6 @@ class _ProfessionalBottomNav extends StatelessWidget {
                           fontWeight: selected
                               ? FontWeight.w800
                               : FontWeight.w700,
-                          // Colour the label too so inactive tabs
-                          // read as coloured, not greyed-out.
                           color: selected
                               ? item.accent
                               : item.accent.withValues(alpha: 0.75),

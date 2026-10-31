@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../dashboard/widgets/dashboard_palette.dart';
 import '../../crops/providers/crop_provider.dart' show selectedFarmIdProvider;
 import '../../expenses/expense_format.dart';
 import '../data/labour_model.dart';
@@ -46,6 +47,19 @@ class _LabourScreenState extends ConsumerState<LabourScreen> {
       );
     }
 
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 1000;
+        if (isDesktop) return _buildDesktopLayout(context, farmId);
+        return _buildMobileLayout(context, farmId);
+      },
+    );
+  }
+
+  // ===========================================================================
+  // MOBILE LAYOUT (unchanged)
+  // ===========================================================================
+  Widget _buildMobileLayout(BuildContext context, String farmId) {
     final labourAsync = ref.watch(labourStreamProvider);
     final summary = ref.watch(labourSummaryProvider);
     final filter = ref.watch(labourFilterProvider);
@@ -127,7 +141,197 @@ class _LabourScreenState extends ConsumerState<LabourScreen> {
     );
   }
 
-  List<Widget> _groupedList(List<Labour> records, String farmId) {
+  // ===========================================================================
+  // DESKTOP LAYOUT
+  // ===========================================================================
+  Widget _buildDesktopLayout(BuildContext context, String farmId) {
+    final labourAsync = ref.watch(labourStreamProvider);
+    final summary = ref.watch(labourSummaryProvider);
+    final filter = ref.watch(labourFilterProvider);
+    final filtered = ref.watch(filteredLabourProvider);
+    final counts = ref.watch(labourCountsProvider);
+
+    return Scaffold(
+      backgroundColor: DPalette.canvas,
+      body: labourAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Error: $e')),
+        data: (all) {
+          if (all.isEmpty) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(32),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1400),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildDesktopHeader(context),
+                      const SizedBox(height: 64),
+                      const SizedBox(height: 420, child: _EmptyState()),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(32),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1400),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildDesktopHeader(context),
+                    const SizedBox(height: 24),
+                    _SummaryCard(summary: summary, isDesktop: true),
+                    if (summary.hasPending) ...[
+                      const SizedBox(height: 16),
+                      _PendingBanner(
+                        amount: summary.pendingAmount,
+                        count: summary.pendingRecords,
+                        onTap: () => ref
+                            .read(labourFilterProvider.notifier)
+                            .state = 'pending',
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    _FilterRow(
+                      current: filter,
+                      counts: counts,
+                      isDesktop: true,
+                      onChange: (v) => ref
+                          .read(labourFilterProvider.notifier)
+                          .state = v,
+                    ),
+                    const SizedBox(height: 20),
+                    ..._groupedList(
+                      filtered,
+                      farmId,
+                      isDesktop: true,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDesktopHeader(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Labour',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: DPalette.ink,
+                  letterSpacing: -0.8,
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Track worker wages, tasks and payments.',
+                style: TextStyle(fontSize: 14, color: DPalette.inkMuted),
+              ),
+            ],
+          ),
+        ),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 300, minWidth: 220),
+          child: TextField(
+            controller: _searchCtrl,
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: 'Search labour...',
+              hintStyle: const TextStyle(
+                fontSize: 13,
+                color: DPalette.inkMuted,
+              ),
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                size: 20,
+                color: DPalette.inkMuted,
+              ),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 14,
+              ),
+              filled: true,
+              fillColor: DPalette.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: DPalette.hairline),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: DPalette.hairline),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: DPalette.brand,
+                  width: 1.5,
+                ),
+              ),
+            ),
+            onChanged: (v) =>
+                ref.read(labourSearchProvider.notifier).state = v,
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton(
+          icon: const Icon(
+            Icons.insights_outlined,
+            color: DPalette.inkMuted,
+          ),
+          tooltip: 'Labour report',
+          onPressed: () => context.push('/reports/labour'),
+        ),
+        const SizedBox(width: 8),
+        ElevatedButton.icon(
+          onPressed: () => context.push('/labour/add'),
+          icon: const Icon(Icons.add_rounded, size: 20),
+          label: const Text(
+            'Add Record',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: DPalette.brand,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 22,
+              vertical: 18,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            elevation: 0,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Grouped list (adaptive)
+  // -------------------------------------------------------------------------
+  List<Widget> _groupedList(
+    List<Labour> records,
+    String farmId, {
+    bool isDesktop = false,
+  }) {
     if (records.isEmpty) {
       return [
         Padding(
@@ -159,7 +363,10 @@ class _LabourScreenState extends ConsumerState<LabourScreen> {
 
       widgets.add(
         Padding(
-          padding: const EdgeInsets.only(top: 16, bottom: 10),
+          padding: EdgeInsets.only(
+            top: isDesktop ? 20 : 16,
+            bottom: 10,
+          ),
           child: Row(
             children: [
               Text(
@@ -194,7 +401,15 @@ class _LabourScreenState extends ConsumerState<LabourScreen> {
         ),
       );
 
-      widgets.addAll(items.map((l) => _LabourTile(record: l, farmId: farmId)));
+      if (isDesktop) {
+        widgets.addAll(
+          items.map((l) => _DesktopLabourTile(record: l, farmId: farmId)),
+        );
+      } else {
+        widgets.addAll(
+          items.map((l) => _LabourTile(record: l, farmId: farmId)),
+        );
+      }
     });
 
     return widgets;
@@ -202,21 +417,31 @@ class _LabourScreenState extends ConsumerState<LabourScreen> {
 }
 
 // ===========================================================================
-// Summary hero
+// Summary hero (adaptive)
 // ===========================================================================
 class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.summary});
+  const _SummaryCard({required this.summary, this.isDesktop = false});
   final LabourSummary summary;
+  final bool isDesktop;
 
   @override
   Widget build(BuildContext context) {
     final change = summary.monthChangePct;
     final up = (change ?? 0) >= 0;
 
+    final padding = isDesktop
+        ? const EdgeInsets.all(28)
+        : const EdgeInsets.all(20);
+    final headlineSize = isDesktop ? 48.0 : 34.0;
+    final statLabelSize = isDesktop ? 11.5 : 11.0;
+    final statValueSize = isDesktop ? 18.0 : 13.5;
+    final dividerHeight = isDesktop ? 42.0 : 28.0;
+    final radius = isDesktop ? 24.0 : 20.0;
+
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: padding,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(radius),
         gradient: LabourStyle.heroGradient,
         boxShadow: [
           BoxShadow(
@@ -234,30 +459,33 @@ class _SummaryCard extends StatelessWidget {
               Text(
                 'Total labour cost',
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: isDesktop ? 14 : 13,
                   fontWeight: FontWeight.w600,
                   color: Colors.white.withValues(alpha: 0.78),
                 ),
               ),
               const Spacer(),
-              Icon(Icons.groups_outlined,
-                  size: 18, color: Colors.white.withValues(alpha: 0.78)),
+              Icon(
+                Icons.groups_outlined,
+                size: isDesktop ? 22 : 18,
+                color: Colors.white.withValues(alpha: 0.78),
+              ),
             ],
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: isDesktop ? 8 : 6),
           Text(
             formatKsh(summary.totalCost),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 34,
+            style: TextStyle(
+              fontSize: headlineSize,
               fontWeight: FontWeight.w700,
               color: Colors.white,
               letterSpacing: -0.5,
             ),
           ),
           if (change != null) ...[
-            const SizedBox(height: 12),
+            SizedBox(height: isDesktop ? 16 : 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
@@ -287,16 +515,19 @@ class _SummaryCard extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(height: 18),
+          SizedBox(height: isDesktop ? 22 : 18),
           Divider(color: Colors.white.withValues(alpha: 0.18), height: 1),
-          const SizedBox(height: 14),
+          SizedBox(height: isDesktop ? 18 : 14),
           Row(
             children: [
-              _stat('Paid', formatShortKsh(summary.paidAmount)),
-              _divider(),
-              _stat('Pending', formatShortKsh(summary.pendingAmount)),
-              _divider(),
-              _stat('Workers', '${summary.workerCount}'),
+              _stat('Paid', formatShortKsh(summary.paidAmount), statLabelSize,
+                  statValueSize),
+              _divider(dividerHeight),
+              _stat('Pending', formatShortKsh(summary.pendingAmount),
+                  statLabelSize, statValueSize),
+              _divider(dividerHeight),
+              _stat('Workers', '${summary.workerCount}', statLabelSize,
+                  statValueSize),
             ],
           ),
         ],
@@ -304,14 +535,20 @@ class _SummaryCard extends StatelessWidget {
     );
   }
 
-  Widget _stat(String label, String value) => Expanded(
+  Widget _stat(
+    String label,
+    String value,
+    double labelSize,
+    double valueSize,
+  ) =>
+      Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               label,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: labelSize,
                 color: Colors.white.withValues(alpha: 0.7),
               ),
             ),
@@ -320,8 +557,8 @@ class _SummaryCard extends StatelessWidget {
               value,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 13.5,
+              style: TextStyle(
+                fontSize: valueSize,
                 fontWeight: FontWeight.w700,
                 color: Colors.white,
               ),
@@ -330,16 +567,16 @@ class _SummaryCard extends StatelessWidget {
         ),
       );
 
-  Widget _divider() => Container(
+  Widget _divider(double height) => Container(
         width: 1,
-        height: 28,
+        height: height,
         margin: const EdgeInsets.symmetric(horizontal: 12),
         color: Colors.white.withValues(alpha: 0.18),
       );
 }
 
 // ===========================================================================
-// Pending banner
+// Pending banner (unchanged)
 // ===========================================================================
 class _PendingBanner extends StatelessWidget {
   const _PendingBanner({
@@ -416,32 +653,40 @@ class _PendingBanner extends StatelessWidget {
 }
 
 // ===========================================================================
-// Filter chips with counts
+// Filter chips (adaptive)
 // ===========================================================================
 class _FilterRow extends StatelessWidget {
   const _FilterRow({
     required this.current,
     required this.counts,
     required this.onChange,
+    this.isDesktop = false,
   });
 
   final String current;
   final ({int all, int paid, int pending}) counts;
   final ValueChanged<String> onChange;
+  final bool isDesktop;
 
   @override
   Widget build(BuildContext context) {
+    final chips = <Widget>[
+      _chip('All', 'all', counts.all, LabourStyle.primary),
+      _chip('Paid', 'paid', counts.paid, LabourStyle.paid),
+      _chip('Pending', 'pending', counts.pending, LabourStyle.partial),
+    ];
+
+    if (isDesktop) {
+      return Wrap(spacing: 8, runSpacing: 8, children: chips);
+    }
+
     return SizedBox(
       height: 36,
-      child: ListView(
+      child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        children: [
-          _chip('All', 'all', counts.all, LabourStyle.primary),
-          const SizedBox(width: 8),
-          _chip('Paid', 'paid', counts.paid, LabourStyle.paid),
-          const SizedBox(width: 8),
-          _chip('Pending', 'pending', counts.pending, LabourStyle.partial),
-        ],
+        itemCount: chips.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) => chips[i],
       ),
     );
   }
@@ -502,7 +747,7 @@ class _FilterRow extends StatelessWidget {
 }
 
 // ===========================================================================
-// Labour row
+// MOBILE labour tile (unchanged — swipe to delete)
 // ===========================================================================
 class _LabourTile extends ConsumerWidget {
   const _LabourTile({required this.record, required this.farmId});
@@ -525,7 +770,6 @@ class _LabourTile extends ConsumerWidget {
     final color = LabourStyle.colorFor(state);
     final radius = BorderRadius.circular(14);
 
-    // Progress = paid / total. Show a bar only when partial or paid.
     final progress = record.totalAmount <= 0
         ? 1.0
         : (record.amountPaid / record.totalAmount).clamp(0.0, 1.0);
@@ -704,6 +948,251 @@ class _LabourTile extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+// ===========================================================================
+// DESKTOP labour tile (popup menu instead of swipe)
+// ===========================================================================
+class _DesktopLabourTile extends ConsumerWidget {
+  const _DesktopLabourTile({required this.record, required this.farmId});
+
+  final Labour record;
+  final String farmId;
+
+  String get _initial {
+    final w = record.workerName.trim();
+    if (w.isEmpty) return '?';
+    return w.characters.first.toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = LabourStyle.state(
+      total: record.totalAmount,
+      paid: record.amountPaid,
+    );
+    final color = LabourStyle.colorFor(state);
+    final radius = BorderRadius.circular(14);
+
+    final progress = record.totalAmount <= 0
+        ? 1.0
+        : (record.amountPaid / record.totalAmount).clamp(0.0, 1.0);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: DPalette.surface,
+        borderRadius: radius,
+        border: Border.all(color: DPalette.hairline),
+        boxShadow: DPalette.cardShadow,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: radius,
+          onTap: () => context.push('/labour/${record.id}'),
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _initial,
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: color,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            record.workerName.isEmpty
+                                ? '(no name)'
+                                : record.workerName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: DPalette.ink,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            [
+                              record.task,
+                              if ((record.location ?? '').isNotEmpty)
+                                record.location!,
+                            ].join('  ·  '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              color: DPalette.inkMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          formatKsh(record.totalAmount),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: state == 'paid'
+                                ? LabourStyle.primaryDeep
+                                : color,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.13),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            LabourStyle.labelFor(state).toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                              color: color,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    PopupMenuButton<String>(
+                      icon: const Icon(
+                        Icons.more_vert,
+                        color: DPalette.inkMuted,
+                        size: 20,
+                      ),
+                      tooltip: 'More options',
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      onSelected: (value) {
+                        if (value == 'open') {
+                          context.push('/labour/${record.id}');
+                        }
+                        if (value == 'delete') {
+                          _confirmDelete(context, ref);
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'open',
+                          child: Row(
+                            children: [
+                              Icon(Icons.open_in_new, size: 16),
+                              SizedBox(width: 8),
+                              Text('Open'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete_outline,
+                                  size: 16, color: Colors.red),
+                              SizedBox(width: 8),
+                              Text(
+                                'Delete',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(3),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          minHeight: 4,
+                          backgroundColor: color.withValues(alpha: 0.12),
+                          valueColor: AlwaysStoppedAnimation(color),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      state == 'paid'
+                          ? '${formatQuantity(record.daysWorked, 'day${record.daysWorked == 1 ? '' : 's'}')}'
+                          : '${formatKsh(record.amountPaid)} / ${formatKsh(record.totalAmount)}',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: DPalette.inkMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete record?'),
+        content: Text(
+          '"${record.workerName.isEmpty ? 'Record' : record.workerName}" will be removed permanently.',
+          style: TextStyle(
+            fontSize: 13,
+            color: Colors.black.withValues(alpha: 0.7),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref.read(labourRepositoryProvider).deleteLabour(farmId, record.id);
   }
 }
 

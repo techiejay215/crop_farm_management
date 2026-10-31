@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../dashboard/widgets/dashboard_palette.dart';
 import '../../sales/data/sale_model.dart';
 import '../data/report_models.dart';
 import '../providers/report_providers.dart';
@@ -15,13 +16,24 @@ class SalesReportScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final range = ref.watch(salesReportRangeProvider);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 1000;
+        if (isDesktop) return _buildDesktop(context, ref);
+        return _buildMobile(context, ref);
+      },
+    );
+  }
+
+  // ===========================================================================
+  // MOBILE (unchanged)
+  // ===========================================================================
+  Widget _buildMobile(BuildContext context, WidgetRef ref) {
     final kpis = ref.watch(salesKpisProvider);
+    final range = ref.watch(salesReportRangeProvider);
     final delta = ref.watch(salesDeltaProvider);
     final byCrop = ref.watch(salesByCropProvider);
     final byBuyer = ref.watch(salesByBuyerProvider);
-    final trend = ref.watch(salesMonthlyTrendProvider);
-    final top = ref.watch(topSalesProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -38,95 +50,330 @@ class SalesReportScreen extends ConsumerWidget {
       ),
       body: ListView(
         padding: EdgeInsets.zero,
+        children: _buildContent(context, ref, isDesktop: false),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // DESKTOP
+  // ===========================================================================
+  Widget _buildDesktop(BuildContext context, WidgetRef ref) {
+    final kpis = ref.watch(salesKpisProvider);
+    final range = ref.watch(salesReportRangeProvider);
+    final delta = ref.watch(salesDeltaProvider);
+    final byCrop = ref.watch(salesByCropProvider);
+    final byBuyer = ref.watch(salesByBuyerProvider);
+
+    return Scaffold(
+      backgroundColor: DPalette.canvas,
+      body: Column(
         children: [
-          const SizedBox(height: 8),
-          ReportPeriodBar(
-            current: range,
-            onChanged: (r) =>
-                ref.read(salesReportRangeProvider.notifier).state = r,
-            onCustomTap: () => _pickCustom(context, ref, range),
+          _buildDesktopHeader(
+            context,
+            kpis,
+            range,
+            delta,
+            byCrop,
+            byBuyer,
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: ReportRangeInfo(
-              range: range,
-              trailing: kpis.isEmpty ? null : formatShortKsh(kpis.revenue),
-            ),
-          ),
-          if (kpis.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: ReportEmptyState(
-                icon: Icons.point_of_sale_outlined,
-                title: 'No sales in this period',
-                message:
-                    'Try a wider range, or record some sales from the Sales tab.',
-              ),
-            )
-          else ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-              child: KpiGrid(items: _kpiItems(kpis, delta)),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _statusRow(kpis),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _comparisonSection(range, delta),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ReportSection(
-                title: 'Revenue by crop',
-                subtitle: '${byCrop.length} ${byCrop.length == 1 ? 'crop' : 'crops'}',
-                child: _breakdown(byCrop, Icons.grass_outlined),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ReportSection(
-                title: 'Top buyers',
-                subtitle: byBuyer.length > 5
-                    ? 'Top 5 of ${byBuyer.length}'
-                    : '${byBuyer.length} ${byBuyer.length == 1 ? 'buyer' : 'buyers'}',
-                child: _breakdown(
-                  byBuyer.take(5).toList(),
-                  Icons.person_outline,
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1400),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: _buildContent(context, ref, isDesktop: true),
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ReportSection(
-                title: 'Monthly revenue',
-                subtitle: _trendSubtitle(trend),
-                child: TrendBars(
-                  points: trend,
-                  barColor: _salesBlue,
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ReportSection(
-                title: 'Biggest sales',
-                subtitle: 'Top ${top.length} of ${kpis.count}',
-                child: _topSalesList(top),
-              ),
-            ),
-            const SizedBox(height: 32),
-          ],
+          ),
         ],
       ),
     );
+  }
+
+  Widget _buildDesktopHeader(
+    BuildContext context,
+    SalesKpis kpis,
+    ReportRange range,
+    PeriodDelta delta,
+    List<BreakdownRow> byCrop,
+    List<BreakdownRow> byBuyer,
+  ) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(32, 18, 32, 18),
+      decoration: const BoxDecoration(
+        color: DPalette.surface,
+        border: Border(bottom: BorderSide(color: DPalette.hairline)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF0D47A1), _salesBlue],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: _salesBlue.withValues(alpha: 0.25),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Icon(Icons.point_of_sale_outlined,
+                color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Sales Report',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: DPalette.ink,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Revenue, best sellers and top buyers.',
+                  style: TextStyle(fontSize: 13, color: DPalette.inkMuted),
+                ),
+              ],
+            ),
+          ),
+          if (!kpis.isEmpty)
+            OutlinedButton.icon(
+              onPressed: () => _copySummary(
+                  context, range, kpis, delta, byCrop, byBuyer),
+              icon: const Icon(Icons.copy_all_outlined, size: 18),
+              label: const Text('Copy summary'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: DPalette.ink,
+                side: const BorderSide(color: DPalette.hairline),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // SHARED CONTENT
+  // ===========================================================================
+  List<Widget> _buildContent(
+    BuildContext context,
+    WidgetRef ref, {
+    bool isDesktop = false,
+  }) {
+    final range = ref.watch(salesReportRangeProvider);
+    final kpis = ref.watch(salesKpisProvider);
+    final delta = ref.watch(salesDeltaProvider);
+    final byCrop = ref.watch(salesByCropProvider);
+    final byBuyer = ref.watch(salesByBuyerProvider);
+    final trend = ref.watch(salesMonthlyTrendProvider);
+    final top = ref.watch(topSalesProvider);
+
+    if (kpis.isEmpty) {
+      return [
+        const SizedBox(height: 8),
+        ReportPeriodBar(
+          current: range,
+          onChanged: (r) =>
+              ref.read(salesReportRangeProvider.notifier).state = r,
+          onCustomTap: () => _pickCustom(context, ref, range),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: ReportRangeInfo(range: range),
+        ),
+        const Padding(
+          padding: EdgeInsets.all(16),
+          child: ReportEmptyState(
+            icon: Icons.point_of_sale_outlined,
+            title: 'No sales in this period',
+            message:
+                'Try a wider range, or record some sales from the Sales tab.',
+          ),
+        ),
+      ];
+    }
+
+    // Pre-built sections
+    final cropSection = ReportSection(
+      title: 'Revenue by crop',
+      subtitle:
+          '${byCrop.length} ${byCrop.length == 1 ? 'crop' : 'crops'}',
+      child: _breakdown(byCrop, Icons.grass_outlined),
+    );
+
+    final buyerSection = ReportSection(
+      title: 'Top buyers',
+      subtitle: byBuyer.length > 5
+          ? 'Top 5 of ${byBuyer.length}'
+          : '${byBuyer.length} ${byBuyer.length == 1 ? 'buyer' : 'buyers'}',
+      child: _breakdown(
+        byBuyer.take(5).toList(),
+        Icons.person_outline,
+      ),
+    );
+
+    final trendSection = ReportSection(
+      title: 'Monthly revenue',
+      subtitle: _trendSubtitle(trend),
+      child: TrendBars(
+        points: trend,
+        barColor: _salesBlue,
+      ),
+    );
+
+    final topSection = ReportSection(
+      title: 'Biggest sales',
+      subtitle: 'Top ${top.length} of ${kpis.count}',
+      child: _topSalesList(top),
+    );
+
+    final statusRow = _statusRow(kpis);
+    final comparison = _comparisonSection(range, delta);
+
+    if (isDesktop) {
+      return [
+        const SizedBox(height: 8),
+        ReportPeriodBar(
+          current: range,
+          onChanged: (r) =>
+              ref.read(salesReportRangeProvider.notifier).state = r,
+          onCustomTap: () => _pickCustom(context, ref, range),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: ReportRangeInfo(
+            range: range,
+            trailing: formatShortKsh(kpis.revenue),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+          child: KpiGrid(items: _kpiItems(kpis, delta), columns: 4),
+        ),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: statusRow,
+        ),
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: comparison,
+        ),
+
+        // Revenue by crop | Top buyers
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: cropSection),
+                const SizedBox(width: 16),
+                Expanded(child: buyerSection),
+              ],
+            ),
+          ),
+        ),
+
+        // Monthly revenue | Biggest sales
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: trendSection),
+                const SizedBox(width: 16),
+                Expanded(child: topSection),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 32),
+      ];
+    }
+
+    // Mobile — original stacking order preserved
+    return [
+      const SizedBox(height: 8),
+      ReportPeriodBar(
+        current: range,
+        onChanged: (r) =>
+            ref.read(salesReportRangeProvider.notifier).state = r,
+        onCustomTap: () => _pickCustom(context, ref, range),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: ReportRangeInfo(
+          range: range,
+          trailing: formatShortKsh(kpis.revenue),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+        child: KpiGrid(items: _kpiItems(kpis, delta)),
+      ),
+      const SizedBox(height: 12),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: statusRow,
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: comparison,
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: cropSection,
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: buyerSection,
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: trendSection,
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: topSection,
+      ),
+      const SizedBox(height: 32),
+    ];
   }
 
   // -------------------------------------------------------------------------
@@ -143,7 +390,7 @@ class SalesReportScreen extends ConsumerWidget {
             ? null
             : '${d.isUp ? '+' : ''}${pct.toStringAsFixed(1)}% vs prev',
         deltaIsUp: pct == null ? null : d.isUp,
-        deltaIsPositive: pct == null ? null : d.isUp, // up = good for sales
+        deltaIsPositive: pct == null ? null : d.isUp,
         color: _salesBlue,
       ),
       KpiData(
@@ -271,7 +518,7 @@ class SalesReportScreen extends ConsumerWidget {
       currentLabel: formatKsh(d.current),
       previousLabel: 'Previous period: ${formatKsh(d.previous)}',
       delta: d,
-      positiveWhenUp: true, // sales — up is good
+      positiveWhenUp: true,
     );
   }
 

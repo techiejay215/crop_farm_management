@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../dashboard/widgets/dashboard_palette.dart';
 import '../../expenses/expense_format.dart';
 import '../../greenhouses/data/greenhouse_style.dart';
 import '../data/report_models.dart';
@@ -16,9 +17,19 @@ class GreenhouseReportScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final range = ref.watch(greenhouseReportRangeProvider);
-    final reportAsync = ref.watch(greenhouseReportProvider);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 1000;
+        if (isDesktop) return _buildDesktop(context, ref);
+        return _buildMobile(context, ref);
+      },
+    );
+  }
 
+  // ===========================================================================
+  // MOBILE (unchanged)
+  // ===========================================================================
+  Widget _buildMobile(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
@@ -45,130 +56,311 @@ class GreenhouseReportScreen extends ConsumerWidget {
         onRefresh: () async => ref.invalidate(greenhouseReportProvider),
         child: ListView(
           padding: EdgeInsets.zero,
-          children: [
-            const SizedBox(height: 8),
-            ReportPeriodBar(
-              current: range,
-              onChanged: (r) =>
-                  ref.read(greenhouseReportRangeProvider.notifier).state = r,
-              onCustomTap: () => _pickCustom(context, ref, range),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: ReportRangeInfo(range: range),
-            ),
-            reportAsync.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.all(48),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (e, _) => Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text('Error: $e'),
-              ),
-              data: (greenhouses) {
-                if (greenhouses.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: ReportEmptyState(
-                      icon: Icons.warehouse_outlined,
-                      title: 'No greenhouses',
-                      message:
-                          'Add a greenhouse and record harvests, sales or '
-                          'expenses against its location name to see it here.',
-                    ),
-                  );
-                }
-
-                final active =
-                    greenhouses.where((g) => g.hasActivity).toList();
-                if (active.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: ReportEmptyState(
-                      icon: Icons.warehouse_outlined,
-                      title: 'No activity yet',
-                      message:
-                          'Attribute harvests, sales or expenses to a '
-                          'greenhouse\'s location to see its performance here.',
-                    ),
-                  );
-                }
-
-                final totals = _Totals.from(active);
-
-                return Column(
-                  children: [
-                    const SizedBox(height: 20),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: _ProfitHero(totals: totals),
-                    ),
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: KpiGrid(items: _kpiItems(totals)),
-                    ),
-                    const SizedBox(height: 12),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: _IntensityRow(totals: totals),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // ---- Ranked greenhouses (tappable) ----
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: ReportSection(
-                        title: 'Ranked by profit / m²',
-                        subtitle:
-                            '${active.length} ${active.length == 1 ? 'greenhouse' : 'greenhouses'} · tap to open',
-                        child: _RankingList(greenhouses: active),
-                      ),
-                    ),
-
-                    if (active.any((g) => g.netYield > 0)) ...[
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: ReportSection(
-                          title: 'Yield intensity',
-                          subtitle: 'Net units per m²',
-                          child: _YieldIntensityList(greenhouses: active),
-                        ),
-                      ),
-                    ],
-
-                    if (active.any((g) => g.density != null)) ...[
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: ReportSection(
-                          title: 'Plant density',
-                          subtitle: 'Plants per m²',
-                          child: _DensityList(greenhouses: active),
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: ReportSection(
-                        title: 'Cost composition',
-                        subtitle: 'Where money goes per greenhouse',
-                        child: _CostComposition(greenhouses: active),
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                  ],
-                );
-              },
-            ),
-          ],
+          children: _buildContent(context, ref, isDesktop: false),
         ),
       ),
     );
+  }
+
+  // ===========================================================================
+  // DESKTOP
+  // ===========================================================================
+  Widget _buildDesktop(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      backgroundColor: DPalette.canvas,
+      body: Column(
+        children: [
+          _buildDesktopHeader(context, ref),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async => ref.invalidate(greenhouseReportProvider),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1400),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children:
+                          _buildContent(context, ref, isDesktop: true),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopHeader(BuildContext context, WidgetRef ref) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(32, 18, 32, 18),
+      decoration: const BoxDecoration(
+        color: DPalette.surface,
+        border: Border(bottom: BorderSide(color: DPalette.hairline)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: GreenhouseStyle.heroGradient.colors,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: GreenhouseStyle.primary.withValues(alpha: 0.25),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Icon(Icons.warehouse_outlined,
+                color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Greenhouse Report',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: DPalette.ink,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Profit, density and yield per m².',
+                  style: TextStyle(fontSize: 13, color: DPalette.inkMuted),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.arrow_back, color: DPalette.ink),
+            tooltip: 'Back to reports',
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/reports');
+              }
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh, color: DPalette.ink),
+            tooltip: 'Refresh',
+            onPressed: () => ref.invalidate(greenhouseReportProvider),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // SHARED CONTENT
+  // ===========================================================================
+  List<Widget> _buildContent(
+    BuildContext context,
+    WidgetRef ref, {
+    bool isDesktop = false,
+  }) {
+    final range = ref.watch(greenhouseReportRangeProvider);
+    final reportAsync = ref.watch(greenhouseReportProvider);
+
+    return [
+      const SizedBox(height: 8),
+      ReportPeriodBar(
+        current: range,
+        onChanged: (r) =>
+            ref.read(greenhouseReportRangeProvider.notifier).state = r,
+        onCustomTap: () => _pickCustom(context, ref, range),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: ReportRangeInfo(range: range),
+      ),
+      reportAsync.when(
+        loading: () => const Padding(
+          padding: EdgeInsets.all(48),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+        error: (e, _) => Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text('Error: $e'),
+        ),
+        data: (greenhouses) {
+          if (greenhouses.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: ReportEmptyState(
+                icon: Icons.warehouse_outlined,
+                title: 'No greenhouses',
+                message:
+                    'Add a greenhouse and record harvests, sales or '
+                    'expenses against its location name to see it here.',
+              ),
+            );
+          }
+
+          final active = greenhouses.where((g) => g.hasActivity).toList();
+          if (active.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: ReportEmptyState(
+                icon: Icons.warehouse_outlined,
+                title: 'No activity yet',
+                message:
+                    'Attribute harvests, sales or expenses to a '
+                    'greenhouse\'s location to see its performance here.',
+              ),
+            );
+          }
+
+          final totals = _Totals.from(active);
+          final hasYield = active.any((g) => g.netYield > 0);
+          final hasDensity = active.any((g) => g.density != null);
+
+          // Pre-built sections
+          final rankedSection = ReportSection(
+            title: 'Ranked by profit / m²',
+            subtitle:
+                '${active.length} ${active.length == 1 ? 'greenhouse' : 'greenhouses'} · tap to open',
+            child: _RankingList(greenhouses: active),
+          );
+
+          final yieldSection = ReportSection(
+            title: 'Yield intensity',
+            subtitle: 'Net units per m²',
+            child: _YieldIntensityList(greenhouses: active),
+          );
+
+          final densitySection = ReportSection(
+            title: 'Plant density',
+            subtitle: 'Plants per m²',
+            child: _DensityList(greenhouses: active),
+          );
+
+          final costSection = ReportSection(
+            title: 'Cost composition',
+            subtitle: 'Where money goes per greenhouse',
+            child: _CostComposition(greenhouses: active),
+          );
+
+          if (isDesktop) {
+            return Column(
+              children: [
+                const SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _ProfitHero(totals: totals),
+                ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: KpiGrid(items: _kpiItems(totals), columns: 4),
+                ),
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _IntensityRow(totals: totals),
+                ),
+                const SizedBox(height: 20),
+
+                // Ranked — full width
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: rankedSection,
+                ),
+
+                // Yield intensity | Plant density (side-by-side when both exist)
+                if (hasYield || hasDensity) ...[
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: (hasYield && hasDensity)
+                        ? IntrinsicHeight(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(child: yieldSection),
+                                const SizedBox(width: 16),
+                                Expanded(child: densitySection),
+                              ],
+                            ),
+                          )
+                        : (hasYield ? yieldSection : densitySection),
+                  ),
+                ],
+
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: costSection,
+                ),
+                const SizedBox(height: 32),
+              ],
+            );
+          }
+
+          // Mobile — original stacking order preserved
+          return Column(
+            children: [
+              const SizedBox(height: 20),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _ProfitHero(totals: totals),
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: KpiGrid(items: _kpiItems(totals)),
+              ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _IntensityRow(totals: totals),
+              ),
+              const SizedBox(height: 20),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: rankedSection,
+              ),
+              if (hasYield) ...[
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: yieldSection,
+                ),
+              ],
+              if (hasDensity) ...[
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: densitySection,
+                ),
+              ],
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: costSection,
+              ),
+              const SizedBox(height: 32),
+            ],
+          );
+        },
+      ),
+    ];
   }
 
   List<KpiData> _kpiItems(_Totals t) {

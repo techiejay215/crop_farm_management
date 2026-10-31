@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../dashboard/widgets/dashboard_palette.dart';
 import '../../crops/data/crop_activity_model.dart';
 import '../../crops/data/crop_style.dart';
 import '../../expenses/expense_format.dart';
@@ -30,6 +31,19 @@ class GreenhouseDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 1000;
+        if (isDesktop) return _buildDesktop(context, ref);
+        return _buildMobile(context, ref);
+      },
+    );
+  }
+
+  // ===========================================================================
+  // MOBILE (unchanged)
+  // ===========================================================================
+  Widget _buildMobile(BuildContext context, WidgetRef ref) {
     final detailAsync = ref.watch(greenhouseDetailProvider(greenhouseId));
 
     return Scaffold(
@@ -70,86 +84,207 @@ class GreenhouseDetailScreen extends ConsumerWidget {
           return RefreshIndicator(
             onRefresh: () async =>
                 ref.invalidate(greenhouseDetailProvider(greenhouseId)),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final w = constraints.maxWidth;
-                final wide = w > 960;
-                final horizontalPad = w < 420 ? 12.0 : 16.0;
-
-                return SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: EdgeInsets.fromLTRB(
-                    horizontalPad,
-                    12,
-                    horizontalPad,
-                    32,
-                  ),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1040),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _HeroCard(detail: detail),
-                          const SizedBox(height: 16),
-                          if (detail.crop != null) ...[
-                            _CurrentCropSection(
-                              detail: detail,
-                              onOpenCrop: () => context.push(
-                                '/crops/${detail.crop!.id}/detail',
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                          ],
-                          _KpiGrid(detail: detail),
-                          const SizedBox(height: 16),
-                          if (wide)
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  flex: 6,
-                                  child: _ActivitiesSection(detail: detail),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  flex: 5,
-                                  child: Column(
-                                    children: [
-                                      _ExpensesSection(detail: detail),
-                                      const SizedBox(height: 16),
-                                      _IncomeSection(detail: detail),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            )
-                          else ...[
-                            _ActivitiesSection(detail: detail),
-                            const SizedBox(height: 16),
-                            _ExpensesSection(detail: detail),
-                            const SizedBox(height: 16),
-                            _IncomeSection(detail: detail),
-                          ],
-                          const SizedBox(height: 16),
-                          if (detail.harvests.isNotEmpty)
-                            _HarvestSection(detail: detail),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1040),
+                  child: _buildBody(context, detail),
+                ),
+              ),
             ),
           );
         },
       ),
     );
   }
+
+  // ===========================================================================
+  // DESKTOP
+  // ===========================================================================
+  Widget _buildDesktop(BuildContext context, WidgetRef ref) {
+    final detailAsync = ref.watch(greenhouseDetailProvider(greenhouseId));
+
+    return Scaffold(
+      backgroundColor: DPalette.canvas,
+      body: Column(
+        children: [
+          _buildDesktopHeader(context, detailAsync),
+          Expanded(
+            child: detailAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text('Error: $e')),
+              data: (detail) {
+                if (detail == null) {
+                  return const Center(child: Text('Greenhouse not found.'));
+                }
+                return RefreshIndicator(
+                  onRefresh: () async => ref
+                      .invalidate(greenhouseDetailProvider(greenhouseId)),
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1400),
+                        child: _buildBody(context, detail),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopHeader(
+    BuildContext context,
+    AsyncValue<GreenhouseDetail?> detailAsync,
+  ) {
+    final name = detailAsync.maybeWhen(
+      data: (d) => d?.greenhouse.name ?? 'Greenhouse',
+      orElse: () => 'Greenhouse',
+    );
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(32, 18, 32, 18),
+      decoration: const BoxDecoration(
+        color: DPalette.surface,
+        border: Border(bottom: BorderSide(color: DPalette.hairline)),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back, color: DPalette.ink),
+            tooltip: 'Back to greenhouses',
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/greenhouses');
+              }
+            },
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: DPalette.ink,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'Greenhouse details, activities and production.',
+                  style: TextStyle(fontSize: 13, color: DPalette.inkMuted),
+                ),
+              ],
+            ),
+          ),
+          detailAsync.maybeWhen(
+            data: (d) => d == null
+                ? const SizedBox.shrink()
+                : OutlinedButton.icon(
+                    onPressed: () =>
+                        context.push('/greenhouses/${d.greenhouse.id}'),
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    label: const Text('Edit'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: DPalette.ink,
+                      side: const BorderSide(color: DPalette.hairline),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+            orElse: () => const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // SHARED BODY (unchanged content logic)
+  // ===========================================================================
+  Widget _buildBody(BuildContext context, GreenhouseDetail detail) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        final wide = w > 960;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _HeroCard(detail: detail),
+            const SizedBox(height: 16),
+            if (detail.crop != null) ...[
+              _CurrentCropSection(
+                detail: detail,
+                onOpenCrop: () => context.push(
+                  '/crops/${detail.crop!.id}/detail',
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            _KpiGrid(detail: detail),
+            const SizedBox(height: 16),
+            if (wide)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 6,
+                    child: _ActivitiesSection(detail: detail),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    flex: 5,
+                    child: Column(
+                      children: [
+                        _ExpensesSection(detail: detail),
+                        const SizedBox(height: 16),
+                        _IncomeSection(detail: detail),
+                      ],
+                    ),
+                  ),
+                ],
+              )
+            else ...[
+              _ActivitiesSection(detail: detail),
+              const SizedBox(height: 16),
+              _ExpensesSection(detail: detail),
+              const SizedBox(height: 16),
+              _IncomeSection(detail: detail),
+            ],
+            const SizedBox(height: 16),
+            if (detail.harvests.isNotEmpty)
+              _HarvestSection(detail: detail),
+          ],
+        );
+      },
+    );
+  }
 }
 
 // ===========================================================================
-// HERO CARD
+// HERO CARD (unchanged)
 // ===========================================================================
 class _HeroCard extends StatelessWidget {
   final GreenhouseDetail detail;
@@ -211,7 +346,6 @@ class _HeroCard extends StatelessWidget {
                 ),
               ),
             ),
-            // soft glow accent
             Positioned(
               right: -60,
               top: -60,
@@ -373,7 +507,7 @@ class _StatusPill extends StatelessWidget {
 }
 
 // ===========================================================================
-// CURRENT CROP SECTION
+// CURRENT CROP SECTION (unchanged)
 // ===========================================================================
 class _CurrentCropSection extends StatelessWidget {
   final GreenhouseDetail detail;
@@ -558,7 +692,7 @@ class _CurrentCropSection extends StatelessWidget {
 }
 
 // ===========================================================================
-// KPI GRID
+// KPI GRID (unchanged)
 // ===========================================================================
 class _KpiGrid extends StatelessWidget {
   final GreenhouseDetail detail;
@@ -669,7 +803,7 @@ class _Kpi {
 }
 
 // ===========================================================================
-// ACTIVITIES
+// ACTIVITIES (unchanged)
 // ===========================================================================
 class _ActivitiesSection extends StatelessWidget {
   final GreenhouseDetail detail;
@@ -789,7 +923,7 @@ class _ActivitiesSection extends StatelessWidget {
 }
 
 // ===========================================================================
-// EXPENSES
+// EXPENSES (unchanged)
 // ===========================================================================
 class _ExpensesSection extends StatelessWidget {
   final GreenhouseDetail detail;
@@ -902,7 +1036,7 @@ class _ExpensesSection extends StatelessWidget {
 }
 
 // ===========================================================================
-// INCOME
+// INCOME (unchanged)
 // ===========================================================================
 class _IncomeSection extends StatelessWidget {
   final GreenhouseDetail detail;
@@ -1024,7 +1158,7 @@ class _IncomeSection extends StatelessWidget {
 }
 
 // ===========================================================================
-// HARVEST
+// HARVEST (unchanged)
 // ===========================================================================
 class _HarvestSection extends StatelessWidget {
   final GreenhouseDetail detail;
@@ -1068,7 +1202,6 @@ class _HarvestSection extends StatelessWidget {
             color: HarvestStyle.primary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(9),
           ),
-          // Fixed: replaced missing HarvestStyle.gradeIcon with a plain icon.
           child: const Icon(
             Icons.agriculture_outlined,
             size: 16,
@@ -1162,7 +1295,7 @@ class _HarvestSection extends StatelessWidget {
 }
 
 // ===========================================================================
-// SHARED: Card wrapper, Section wrapper, empty block
+// SHARED WRAPPERS (unchanged)
 // ===========================================================================
 class _Card extends StatelessWidget {
   final Widget child;
